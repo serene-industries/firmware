@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Cleaver Hall Effect — 0.4.2.4
+- Re-vendored from `SmollChungus/qmk_firmware@28a538cf` (dev_cleaver, 2026-04-28),
+  the latest Cleaver line by Matthijs Muller. Includes the **row fix** ("rotate
+  uneven row leds for 0.4.2"), matrix-scan cleanup, caps-lock-LED calibration
+  fix, and console-off default. (Previously vendored a version behind these.)
+
 ### Changed
 - **Repository reconciled (2026-05-29).** This repo is now the real firmware hub.
   All four board sources (Icebreaker Wireless / Hotswap / Hall Effect, Cleaver)

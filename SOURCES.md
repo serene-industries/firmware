@@ -46,10 +46,16 @@ west build -p -b icebreaker -S studio-rpc-usb-uart app \
 - **`boards/wired/icebreaker_hotswap/`**
   - From the QMK tree at `serene-industries/firmware`'s qmk clone, `keyboards/icebreaker/hotswap/` (upstream-based, commit `56a2e332`).
 - **`boards/wired/icebreaker_hall_effect/`** (+ shared `icebreaker_rgb.{c,h}`)
-  - From: `SmollChungus/qmk_firmware`, branch `dev_cleaver`, commit `a9ca3aa9`
+  - From: `SmollChungus/qmk_firmware`, branch `dev_cleaver`, commit `28a538cf`
   - Path upstream: `keyboards/icebreaker/`
-- **`boards/wired/cleaver/`** (+ shared `cleaver_rgb.{c,h}`)
-  - From: `SmollChungus/qmk_firmware@a9ca3aa9`, path `keyboards/cleaver/`
+- **`boards/wired/cleaver/`** (+ shared `cleaver_rgb.{c,h}`) — **Cleaver HE v0.4.2.4**
+  - From: `SmollChungus/qmk_firmware@28a538cf` (dev_cleaver HEAD, 2026-04-28),
+    path `keyboards/cleaver/`
+  - **Includes Matthijs Muller's 0.4.2 row fix** ("rotate uneven row leds for
+    0.4.2", `1211f24d`) plus the matrix-scan cleanup (`f3b8f5ff`), caps-lock-LED
+    fix (`178b373a`), and console-off default (`28a538cf`).
+  - Note: **Matthijs Muller == SmollChungus** (`smollchungusm`, mpamuller) — he
+    designs and maintains the Cleaver; `dev_cleaver` is his canonical line.
 
 > **Hall-Effect variant divergence:** a *second, different* Icebreaker HE board
 > existed only on the local machine (`~/qmk_firmware/keyboards/icebreaker/hall_effect/`,
@@ -59,8 +65,9 @@ west build -p -b icebreaker -S studio-rpc-usb-uart app \
 > `backup/icebreaker-he-board-local-20260529` for review. **Confirm which HE
 > board ships to customers before cutting an HE release.**
 >
-> Note: `SmollChungus/qmk_firmware@origin/dev_cleaver` is `28a538cf` — 4 commits
-> ahead of the vendored `a9ca3aa9`. Re-vendor if those commits are wanted.
+> Vendored at `dev_cleaver` HEAD (`28a538cf`). When Matthijs pushes new Cleaver
+> work, re-vendor `keyboards/cleaver` and `keyboards/icebreaker` from the new tip
+> and bump the Cleaver version below.
 
 ### Build (wired)
 
