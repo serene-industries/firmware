@@ -1,0 +1,74 @@
+name: Firmware (Wireless)
+
+# Cloud build for the Icebreaker Wireless (ZMK) firmware.
+#   - Edit board/keymap under config/boards/arm/icebreaker/ and push to main
+#     -> CI compiles and uploads icebreaker_wireless.uf2 as an artifact.
+#   - Push a tag icebreaker-wireless-vX.Y.Z
+#     -> CI compiles AND publishes a GitHub Release with the .uf2.
+#        The si-configurator reads these releases by tag prefix, so a tagged
+#        build is live in the configurator within minutes. No local machine.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'config/**'
+      - 'build.yaml'
+      - '.github/workflows/firmware.yml'
+    tags:
+      - 'icebreaker-wireless-v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container: zmkfirmware/zmk-build-arm:stable
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Cache west workspace
+        uses: actions/cache@v4
+        with:
+          path: |
+            modules/
+            tools/
+            zephyr/
+            bootloader/
+            zmk/
+          key: zmk-${{ hashFiles('config/west.yml') }}
+          restore-keys: zmk-
+
+      - name: West init
+        run: west init -l config
+
+      - name: West update
+        run: west update
+
+      - name: West Zephyr export
+        run: west zephyr-export
+
+      - name: Build wireless firmware
+        run: |
+          west build -s zmk/app -d build -b icebreaker -S studio-rpc-usb-uart -- \
+            -DZMK_CONFIG="${GITHUB_WORKSPACE}/config" \
+            -DBOARD_ROOT="${GITHUB_WORKSPACE}/config"
+
+      - name: Stage artifact
+        run: cp build/zephyr/zmk.uf2 icebreaker_wireless.uf2
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: icebreaker_wireless
+          path: icebreaker_wireless.uf2
+
+      - name: Publish release (on version tag)
+        if: startsWith(github.ref, 'refs/tags/icebreaker-wireless-v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: icebreaker_wireless.uf2
+          generate_release_notes: true

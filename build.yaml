@@ -1,0 +1,6 @@
+# Cloud build matrix for Serene wireless firmware.
+# Edit the board files in config/boards/arm/icebreaker/ and push;
+# tag icebreaker-wireless-vX.Y.Z to cut a release the configurator serves.
+include:
+  - board: icebreaker
+    snippet: studio-rpc-usb-uart

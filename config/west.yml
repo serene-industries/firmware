@@ -1,0 +1,11 @@
+manifest:
+  remotes:
+    - name: serene-industries
+      url-base: https://github.com/serene-industries
+  projects:
+    - name: zmk
+      remote: serene-industries
+      revision: icebreaker-studio
+      import: app/west.yml
+  self:
+    path: config
