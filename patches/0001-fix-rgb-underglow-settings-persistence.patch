@@ -1,0 +1,123 @@
+diff --git a/app/src/rgb_underglow.c b/app/src/rgb_underglow.c
+index 3453fb44..c9974f8b 100644
+--- a/app/src/rgb_underglow.c
++++ b/app/src/rgb_underglow.c
+@@ -210,37 +210,72 @@ static void zmk_rgb_underglow_tick_handler(struct k_timer *timer) {
+ K_TIMER_DEFINE(underglow_tick, zmk_rgb_underglow_tick_handler, NULL);
+ 
+ #if IS_ENABLED(CONFIG_SETTINGS)
++static bool settings_were_loaded = false;
++static struct k_work_delayable underglow_save_work;
++static void zmk_rgb_underglow_save_state_work(struct k_work *_work);
++
+ static int rgb_settings_set(const char *name, size_t len, settings_read_cb read_cb, void *cb_arg) {
+     const char *next;
+     int rc;
+ 
+     if (settings_name_steq(name, "state", &next) && !next) {
+         if (len != sizeof(state)) {
++            LOG_WRN("RGB settings size mismatch: expected %d, got %d", (int)sizeof(state), (int)len);
+             return -EINVAL;
+         }
+ 
+         rc = read_cb(cb_arg, &state, sizeof(state));
+         if (rc >= 0) {
+-            if (state.on) {
+-                k_timer_start(&underglow_tick, K_NO_WAIT, K_MSEC(50));
+-            }
+-
++            settings_were_loaded = true;
++            // Reset animation_step to 0 - it shouldn't be persisted between sessions
++            state.animation_step = 0;
++            LOG_INF("RGB settings loaded: on=%d, brt=%d, hue=%d", state.on, state.color.b, state.color.h);
+             return 0;
+         }
+ 
++        LOG_ERR("RGB settings read failed: %d", rc);
+         return rc;
+     }
+ 
+     return -ENOENT;
+ }
+ 
+-SETTINGS_STATIC_HANDLER_DEFINE(rgb_underglow, "rgb/underglow", NULL, rgb_settings_set, NULL, NULL);
++static int rgb_settings_commit(void) {
++    // This runs after all settings are loaded
++    // Now we can safely start the timer with the correct (loaded or default) state
+ 
+-static void zmk_rgb_underglow_save_state_work(struct k_work *_work) {
+-    settings_save_one("rgb/underglow/state", &state, sizeof(state));
++#if IS_ENABLED(CONFIG_ZMK_RGB_UNDERGLOW_AUTO_OFF_USB)
++    // Override on state based on USB power if this feature is enabled
++    if (!settings_were_loaded) {
++        state.on = zmk_usb_is_powered();
++    }
++#endif
++
++    if (state.on) {
++        k_timer_start(&underglow_tick, K_NO_WAIT, K_MSEC(50));
++    } else {
++        k_timer_stop(&underglow_tick);
++    }
++
++    // If no settings existed, save the defaults for next boot
++    if (!settings_were_loaded) {
++        LOG_INF("No RGB settings found, saving defaults");
++        k_work_reschedule(&underglow_save_work, K_NO_WAIT);
++    }
++
++    return 0;
+ }
+ 
+-static struct k_work_delayable underglow_save_work;
++SETTINGS_STATIC_HANDLER_DEFINE(rgb_underglow, "rgb/underglow", NULL, rgb_settings_set, rgb_settings_commit, NULL);
++
++static void zmk_rgb_underglow_save_state_work(struct k_work *_work) {
++    int ret = settings_save_one("rgb/underglow/state", &state, sizeof(state));
++    if (ret) {
++        LOG_ERR("RGB settings save failed: %d", ret);
++    } else {
++        LOG_INF("RGB settings saved: on=%d, brt=%d", state.on, state.color.b);
++    }
++}
+ #endif
+ 
+ static int zmk_rgb_underglow_init(void) {
+@@ -253,6 +288,7 @@ static int zmk_rgb_underglow_init(void) {
+     }
+ #endif
+ 
++    // Set default state - this may be overwritten by settings_load() later
+     state = (struct rgb_underglow_state){
+         color : {
+             h : CONFIG_ZMK_RGB_UNDERGLOW_HUE_START,
+@@ -267,15 +303,17 @@ static int zmk_rgb_underglow_init(void) {
+ 
+ #if IS_ENABLED(CONFIG_SETTINGS)
+     k_work_init_delayable(&underglow_save_work, zmk_rgb_underglow_save_state_work);
+-#endif
+-
++    // Don't start the timer here - the settings commit handler will do it
++    // after settings are loaded, ensuring we use the correct (loaded or default) state
++#else
++    // No settings subsystem - start immediately with defaults
+ #if IS_ENABLED(CONFIG_ZMK_RGB_UNDERGLOW_AUTO_OFF_USB)
+     state.on = zmk_usb_is_powered();
+ #endif
+-
+     if (state.on) {
+         k_timer_start(&underglow_tick, K_NO_WAIT, K_MSEC(50));
+     }
++#endif
+ 
+     return 0;
+ }
+@@ -381,7 +419,7 @@ int zmk_rgb_underglow_set_hsb(struct zmk_led_hsb color) {
+ 
+     state.color = color;
+ 
+-    return 0;
++    return zmk_rgb_underglow_save_state();
+ }
+ 
+ struct zmk_led_hsb zmk_rgb_underglow_calc_hue(int direction) {

@@ -1,0 +1,317 @@
+/*
+ * Copyright (c) 2020 The ZMK Contributors
+ *
+ * SPDX-License-Identifier: MIT
+ */
+
+/dts-v1/;
+#include <nordic/nrf52840_qiaa.dtsi>
+#include <dt-bindings/zmk/matrix_transform.h>
+#include <dt-bindings/led/led.h>
+#include <physical_layouts.dtsi>
+
+/ {
+	model = "icebreaker, rev_1";
+	compatible = "icebreaker,rev_1";
+
+	chosen {
+		zephyr,code-partition = &code_partition;
+		zephyr,sram = &sram0;
+		zephyr,flash = &flash0;
+		zephyr,settings-partition = &storage_partition;
+		zmk,battery = &fuelgauge;
+		zmk,kscan = &kscan0;
+		zmk,physical-layout = &physical_layout0;
+		zmk,underglow = &led_strip;
+		zmk,studio-rpc-uart = &studio_rpc_uart;
+	};
+
+	/* External power control for LEDs - LED_EN = P1.10 */
+	ext-power {
+		compatible = "zmk,ext-power-generic";
+		control-gpios = <&gpio1 10 GPIO_ACTIVE_HIGH>;
+	};
+
+	default_transform: keymap_transform_0 {
+		compatible = "zmk,matrix-transform";
+		columns = <15>;
+		rows = <5>;
+		map = <
+			RC(0,0)	RC(0,1)	RC(0,2)	RC(0,3)	RC(0,4)	RC(0,5)	RC(0,6)	RC(0,7)	RC(0,8)	RC(0,9)	RC(0,10) RC(0,11) RC(0,12) RC(0,13) RC(2,13) RC(0,14)
+			RC(1,0)	RC(1,1)	RC(1,2)	RC(1,3)	RC(1,4)	RC(1,5)	RC(1,6)	RC(1,7)	RC(1,8)	RC(1,9)	RC(1,10) RC(1,11) RC(1,12) RC(1,13) RC(1,14)
+			RC(2,0)	RC(2,1)	RC(2,2)	RC(2,3)	RC(2,4)	RC(2,5)	RC(2,6)	RC(2,7)	RC(2,8)	RC(2,9)	RC(2,10) RC(2,11) RC(2,12)          RC(2,14)
+			RC(3,0)	RC(3,1)	RC(3,2)	RC(3,3)	RC(3,4)	RC(3,5)	RC(3,6)	RC(3,7)	RC(3,8)	RC(3,9)	RC(3,10) RC(3,11) RC(3,12) RC(3,13) RC(3,14)
+			RC(4,0)	RC(4,1)	RC(4,2)	                    	RC(4,6)	                    	RC(4,10) RC(4,11) RC(4,12) RC(4,13) RC(4,14)
+		>;
+	};
+
+	/* Physical layout for ZMK Studio */
+	physical_layout0: physical_layout_0 {
+		compatible = "zmk,physical-layout";
+		display-name = "Default";
+		transform = <&default_transform>;
+		kscan = <&kscan0>;
+		keys = <
+			/* Row 0: 16 keys */
+			&key_physical_attrs 100 100   0   0 0 0 0   /* Esc */
+			&key_physical_attrs 100 100 100   0 0 0 0   /* 1 */
+			&key_physical_attrs 100 100 200   0 0 0 0   /* 2 */
+			&key_physical_attrs 100 100 300   0 0 0 0   /* 3 */
+			&key_physical_attrs 100 100 400   0 0 0 0   /* 4 */
+			&key_physical_attrs 100 100 500   0 0 0 0   /* 5 */
+			&key_physical_attrs 100 100 600   0 0 0 0   /* 6 */
+			&key_physical_attrs 100 100 700   0 0 0 0   /* 7 */
+			&key_physical_attrs 100 100 800   0 0 0 0   /* 8 */
+			&key_physical_attrs 100 100 900   0 0 0 0   /* 9 */
+			&key_physical_attrs 100 100 1000  0 0 0 0   /* 0 */
+			&key_physical_attrs 100 100 1100  0 0 0 0   /* - */
+			&key_physical_attrs 100 100 1200  0 0 0 0   /* = */
+			&key_physical_attrs 100 100 1300  0 0 0 0   /* \ */
+			&key_physical_attrs 100 100 1400  0 0 0 0   /* Del */
+			&key_physical_attrs 100 100 1500  0 0 0 0   /* ` */
+			/* Row 1: 15 keys */
+			&key_physical_attrs 150 100   0 100 0 0 0   /* Tab */
+			&key_physical_attrs 100 100 150 100 0 0 0   /* Q */
+			&key_physical_attrs 100 100 250 100 0 0 0   /* W */
+			&key_physical_attrs 100 100 350 100 0 0 0   /* E */
+			&key_physical_attrs 100 100 450 100 0 0 0   /* R */
+			&key_physical_attrs 100 100 550 100 0 0 0   /* T */
+			&key_physical_attrs 100 100 650 100 0 0 0   /* Y */
+			&key_physical_attrs 100 100 750 100 0 0 0   /* U */
+			&key_physical_attrs 100 100 850 100 0 0 0   /* I */
+			&key_physical_attrs 100 100 950 100 0 0 0   /* O */
+			&key_physical_attrs 100 100 1050 100 0 0 0  /* P */
+			&key_physical_attrs 100 100 1150 100 0 0 0  /* [ */
+			&key_physical_attrs 100 100 1250 100 0 0 0  /* ] */
+			&key_physical_attrs 150 100 1350 100 0 0 0  /* Backspace */
+			&key_physical_attrs 100 100 1500 100 0 0 0  /* Home */
+			/* Row 2: 14 keys */
+			&key_physical_attrs 175 100   0 200 0 0 0   /* Caps */
+			&key_physical_attrs 100 100 175 200 0 0 0   /* A */
+			&key_physical_attrs 100 100 275 200 0 0 0   /* S */
+			&key_physical_attrs 100 100 375 200 0 0 0   /* D */
+			&key_physical_attrs 100 100 475 200 0 0 0   /* F */
+			&key_physical_attrs 100 100 575 200 0 0 0   /* G */
+			&key_physical_attrs 100 100 675 200 0 0 0   /* H */
+			&key_physical_attrs 100 100 775 200 0 0 0   /* J */
+			&key_physical_attrs 100 100 875 200 0 0 0   /* K */
+			&key_physical_attrs 100 100 975 200 0 0 0   /* L */
+			&key_physical_attrs 100 100 1075 200 0 0 0  /* ; */
+			&key_physical_attrs 100 100 1175 200 0 0 0  /* ' */
+			&key_physical_attrs 225 100 1275 200 0 0 0  /* Enter */
+			&key_physical_attrs 100 100 1500 200 0 0 0  /* End */
+			/* Row 3: 15 keys (includes encoder press) */
+			&key_physical_attrs 225 100   0 300 0 0 0   /* LShift */
+			&key_physical_attrs  50  50 1550  50 0 0 0  /* Encoder Press (hidden) */
+			&key_physical_attrs 100 100 225 300 0 0 0   /* Z */
+			&key_physical_attrs 100 100 325 300 0 0 0   /* X */
+			&key_physical_attrs 100 100 425 300 0 0 0   /* C */
+			&key_physical_attrs 100 100 525 300 0 0 0   /* V */
+			&key_physical_attrs 100 100 625 300 0 0 0   /* B */
+			&key_physical_attrs 100 100 725 300 0 0 0   /* N */
+			&key_physical_attrs 100 100 825 300 0 0 0   /* M */
+			&key_physical_attrs 100 100 925 300 0 0 0   /* , */
+			&key_physical_attrs 100 100 1025 300 0 0 0  /* . */
+			&key_physical_attrs 100 100 1125 300 0 0 0  /* / */
+			&key_physical_attrs 175 100 1225 300 0 0 0  /* RShift */
+			&key_physical_attrs 100 100 1400 300 0 0 0  /* Up */
+			&key_physical_attrs 100 100 1500 300 0 0 0  /* MO(1) */
+			/* Row 4: 10 keys */
+			&key_physical_attrs 150 100   0 400 0 0 0   /* LCtrl */
+			&key_physical_attrs 100 100 150 400 0 0 0   /* LGUI */
+			&key_physical_attrs 150 100 250 400 0 0 0   /* LAlt */
+			&key_physical_attrs 700 100 400 400 0 0 0   /* Space */
+			&key_physical_attrs 100 100 1100 400 0 0 0  /* RAlt */
+			&key_physical_attrs 100 100 1200 400 0 0 0  /* RCtrl */
+			&key_physical_attrs 100 100 1300 400 0 0 0  /* Left */
+			&key_physical_attrs 100 100 1400 400 0 0 0  /* Down */
+			&key_physical_attrs 100 100 1500 400 0 0 0  /* Right */
+		>;
+	};
+
+	kscan0: kscan {
+		compatible = "zmk,kscan-gpio-matrix";
+		wakeup-source;
+		diode-direction = "col2row";
+		row-gpios
+			= <&gpio0 3 (GPIO_ACTIVE_HIGH | GPIO_PULL_DOWN)>   // ROW0 = P0.03
+			, <&gpio1 13 (GPIO_ACTIVE_HIGH | GPIO_PULL_DOWN)>  // ROW1 = P1.13
+			, <&gpio0 30 (GPIO_ACTIVE_HIGH | GPIO_PULL_DOWN)>  // ROW2 = P0.30
+			, <&gpio0 31 (GPIO_ACTIVE_HIGH | GPIO_PULL_DOWN)>  // ROW3 = P0.31
+			, <&gpio1 11 (GPIO_ACTIVE_HIGH | GPIO_PULL_DOWN)>  // ROW4 = P1.11
+			;
+		col-gpios
+			= <&gpio0 26 GPIO_ACTIVE_HIGH>   // COL0  = P0.26
+			, <&gpio0  6 GPIO_ACTIVE_HIGH>   // COL1  = P0.06
+			, <&gpio0  8 GPIO_ACTIVE_HIGH>   // COL2  = P0.08
+			, <&gpio0  4 GPIO_ACTIVE_HIGH>   // COL3  = P0.04
+			, <&gpio0  7 GPIO_ACTIVE_HIGH>   // COL4  = P0.07
+			, <&gpio0 28 GPIO_ACTIVE_HIGH>   // COL5  = P0.28
+			, <&gpio0  9 GPIO_ACTIVE_HIGH>   // COL6  = P0.09
+			, <&gpio0 10 GPIO_ACTIVE_HIGH>   // COL7  = P0.10
+			, <&gpio1  6 GPIO_ACTIVE_HIGH>   // COL8  = P1.06
+			, <&gpio1  4 GPIO_ACTIVE_HIGH>   // COL9  = P1.04
+			, <&gpio0 22 GPIO_ACTIVE_HIGH>   // COL10 = P0.22
+			, <&gpio0 20 GPIO_ACTIVE_HIGH>   // COL11 = P0.20
+			, <&gpio0 17 GPIO_ACTIVE_HIGH>   // COL12 = P0.17
+			, <&gpio0 15 GPIO_ACTIVE_HIGH>   // COL13 = P0.15
+			, <&gpio0 24 GPIO_ACTIVE_HIGH>   // COL14 = P0.24
+			;
+	};
+
+	encoder: encoder {
+		compatible = "alps,ec11";
+		a-gpios = <&gpio0 29 (GPIO_ACTIVE_HIGH | GPIO_PULL_UP)>;
+		b-gpios = <&gpio0 2 (GPIO_ACTIVE_HIGH | GPIO_PULL_UP)>;
+		steps = <80>;
+		status = "disabled";
+	};
+
+	sensors: sensors {
+		compatible = "zmk,keymap-sensors";
+		sensors = <&encoder>;
+		triggers-per-rotation = <20>;
+	};
+
+	/* GPIO key for wakeup - uses ROW0 pin */
+	keys {
+		compatible = "gpio-keys";
+		soft_off_gpio_key: soft_off_gpio_key {
+			gpios = <&gpio0 3 (GPIO_ACTIVE_HIGH | GPIO_PULL_DOWN)>;
+		};
+	};
+
+	/* Wakeup trigger - drives columns high so any key on ROW0 wakes device */
+	wakeup_scan: wakeup_scan {
+		compatible = "zmk,gpio-key-wakeup-trigger";
+		trigger = <&soft_off_gpio_key>;
+		wakeup-source;
+		/* All column pins - drive them high during soft-off so pressing any ROW0 key wakes */
+		extra-gpios
+			= <&gpio0 26 GPIO_ACTIVE_HIGH>   // COL0
+			, <&gpio0  6 GPIO_ACTIVE_HIGH>   // COL1
+			, <&gpio0  8 GPIO_ACTIVE_HIGH>   // COL2
+			, <&gpio0  4 GPIO_ACTIVE_HIGH>   // COL3
+			, <&gpio0  7 GPIO_ACTIVE_HIGH>   // COL4
+			, <&gpio0 28 GPIO_ACTIVE_HIGH>   // COL5
+			, <&gpio0  9 GPIO_ACTIVE_HIGH>   // COL6
+			, <&gpio0 10 GPIO_ACTIVE_HIGH>   // COL7
+			, <&gpio1  6 GPIO_ACTIVE_HIGH>   // COL8
+			, <&gpio1  4 GPIO_ACTIVE_HIGH>   // COL9
+			, <&gpio0 22 GPIO_ACTIVE_HIGH>   // COL10
+			, <&gpio0 20 GPIO_ACTIVE_HIGH>   // COL11
+			, <&gpio0 17 GPIO_ACTIVE_HIGH>   // COL12
+			, <&gpio0 15 GPIO_ACTIVE_HIGH>   // COL13
+			, <&gpio0 24 GPIO_ACTIVE_HIGH>   // COL14
+			;
+	};
+
+	/* Soft-off wakeup sources */
+	soft_off_wakers {
+		compatible = "zmk,soft-off-wakeup-sources";
+		wakeup-sources = <&wakeup_scan>;
+	};
+};
+
+&gpiote {
+	status = "okay";
+};
+
+&gpio0 {
+	status = "okay";
+};
+
+&gpio1 {
+	status = "okay";
+};
+
+zephyr_udc0: &usbd {
+	status = "okay";
+	studio_rpc_uart: studio_rpc_uart {
+		compatible = "zephyr,cdc-acm-uart";
+	};
+};
+
+&pinctrl {
+	i2c0_default: i2c0_default {
+		group1 {
+			psels = <NRF_PSEL(TWIM_SDA, 0, 5)>,
+				<NRF_PSEL(TWIM_SCL, 1, 9)>;
+		};
+	};
+	i2c0_sleep: i2c0_sleep {
+		group1 {
+			psels = <NRF_PSEL(TWIM_SDA, 0, 5)>,
+				<NRF_PSEL(TWIM_SCL, 1, 9)>;
+			low-power-enable;
+		};
+	};
+	spi3_default: spi3_default {
+		group1 {
+			psels = <NRF_PSEL(SPIM_MOSI, 0, 13)>;  // LED_LV = P0.13
+		};
+	};
+	spi3_sleep: spi3_sleep {
+		group1 {
+			psels = <NRF_PSEL(SPIM_MOSI, 0, 13)>;
+			low-power-enable;
+		};
+	};
+};
+
+&i2c0 {
+	status = "okay";
+	compatible = "nordic,nrf-twim";
+	pinctrl-0 = <&i2c0_default>;
+	pinctrl-1 = <&i2c0_sleep>;
+	pinctrl-names = "default", "sleep";
+	clock-frequency = <100000>;
+
+	fuelgauge: max17048@36 {
+		compatible = "zmk,maxim-max17048";
+		reg = <0x36>;
+	};
+};
+
+&flash0 {
+	partitions {
+		compatible = "fixed-partitions";
+		#address-cells = <1>;
+		#size-cells = <1>;
+
+		sd_partition: partition@0 {
+			label = "softdevice";
+			reg = <0x00000000 0x00026000>;
+		};
+		code_partition: partition@26000 {
+			label = "code_partition";
+			reg = <0x00026000 0x000c6000>;
+		};
+		storage_partition: partition@ec000 {
+			label = "storage";
+			reg = <0x000ec000 0x00008000>;
+		};
+		boot_partition: partition@f4000 {
+			label = "adafruit_boot";
+			reg = <0x000f4000 0x0000c000>;
+		};
+	};
+};
+
+&spi3 {
+	compatible = "nordic,nrf-spim";
+	status = "okay";
+	pinctrl-0 = <&spi3_default>;
+	pinctrl-1 = <&spi3_sleep>;
+	pinctrl-names = "default", "sleep";
+
+	led_strip: ws2812@0 {
+		compatible = "worldsemi,ws2812-spi";
+		reg = <0>;
+		spi-max-frequency = <4000000>;
+		chain-length = <68>;
+		spi-one-frame = <0x70>;
+		spi-zero-frame = <0x40>;
+		color-mapping = <LED_COLOR_ID_GREEN LED_COLOR_ID_RED LED_COLOR_ID_BLUE>;
+	};
+};

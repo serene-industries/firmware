@@ -1,0 +1,33 @@
+# SPDX-License-Identifier: MIT
+
+if BOARD_ICEBREAKER
+
+config BOARD
+	default "icebreaker"
+
+config ZMK_KEYBOARD_NAME
+	default "Icebreaker"
+
+# Enable HWINFO for unique device identification (last 4 hex of serial)
+config HWINFO
+	default y
+
+# Enable dynamic BT name (required for runtime suffix addition)
+config BT_DEVICE_NAME_DYNAMIC
+	default y
+
+# Increase max BT device name to fit "Icebreaker Wireless XXXX" (24 chars)
+config BT_DEVICE_NAME_MAX
+	default 28
+
+if USB_DEVICE_STACK
+
+config USB_NRFX
+	default y
+
+endif # USB_DEVICE_STACK
+
+config BT_CTLR
+	default BT
+
+endif # BOARD_ICEBREAKER
