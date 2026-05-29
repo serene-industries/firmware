@@ -19,6 +19,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   are vendored here from their working repos. See [SOURCES.md](SOURCES.md).
 - Documented corrected wireless key combinations (bootloader / sleep) — pending
   hardware verification.
+- **CI: wireless releases now cut automatically from `VERSION`.** Bumping the
+  `icebreaker-wireless` line in `VERSION` on `main` makes CI build and publish
+  `icebreaker-wireless-v<version>` (if it doesn't already exist) — no tag push
+  needed. Pushing the tag directly still works too. (`.github/workflows/firmware.yml`)
 
 > Wireless ZMK changes now ship via tagged releases — see the **1.0.1** entry
 > below for the latest cut.

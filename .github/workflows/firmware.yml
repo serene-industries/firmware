@@ -3,9 +3,13 @@ name: Firmware (Wireless)
 # Cloud build for the Icebreaker Wireless (ZMK) firmware.
 #   - Edit board/keymap under config/boards/arm/icebreaker/ and push to main
 #     -> CI compiles and uploads icebreaker_wireless.uf2 as an artifact.
-#   - Push a tag icebreaker-wireless-vX.Y.Z
-#     -> CI compiles AND publishes a GitHub Release with the .uf2.
-#        The si-configurator reads these releases by tag prefix, so a tagged
+#   - Bump the icebreaker-wireless line in VERSION on main
+#     -> CI compiles AND publishes a GitHub Release tagged from that version
+#        (icebreaker-wireless-v<VERSION>), if it doesn't already exist. This is
+#        the normal way to ship: no tag push needed, just bump VERSION on main.
+#   - Pushing a tag icebreaker-wireless-vX.Y.Z still works too (compiles AND
+#     publishes that exact tag).
+#        The si-configurator reads these releases by tag prefix, so a published
 #        build is live in the configurator within minutes. No local machine.
 
 on:
@@ -14,6 +18,7 @@ on:
     paths:
       - 'config/**'
       - 'build.yaml'
+      - 'VERSION'
       - '.github/workflows/firmware.yml'
     tags:
       - 'icebreaker-wireless-v*'
@@ -29,6 +34,44 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Resolve release tag from VERSION
+        id: rel
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if [[ "${GITHUB_REF}" == refs/tags/icebreaker-wireless-v* ]]; then
+            # Tag push: release exactly that tag.
+            TAG="${GITHUB_REF#refs/tags/}"
+            DO=true
+          else
+            # Branch push / manual run: derive the tag from VERSION and only
+            # publish if that release doesn't already exist (idempotent — a
+            # plain config change re-builds the artifact but won't re-release).
+            VER="$(grep -E '^[[:space:]]*icebreaker-wireless[[:space:]]' VERSION | awk '{print $2}')"
+            TAG="icebreaker-wireless-v${VER}"
+            API="https://api.github.com/repos/${GITHUB_REPOSITORY}/releases/tags/${TAG}"
+            if command -v curl >/dev/null 2>&1; then
+              CODE="$(curl -s -o /dev/null -w '%{http_code}' \
+                -H "Authorization: Bearer ${GH_TOKEN}" \
+                -H "Accept: application/vnd.github+json" "${API}")"
+            elif command -v wget >/dev/null 2>&1; then
+              CODE="$(wget -q -S -O /dev/null \
+                --header="Authorization: Bearer ${GH_TOKEN}" \
+                --header="Accept: application/vnd.github+json" "${API}" 2>&1 \
+                | awk '/HTTP\//{c=$2} END{print c+0}')"
+            else
+              CODE="000"
+            fi
+            # Only an explicit 200 (release already exists) skips publishing;
+            # 404 or any transient/non-200 falls through to publish (re-publish
+            # is idempotent — action-gh-release updates the existing release).
+            if [[ "${CODE}" == "200" ]]; then DO=false; else DO=true; fi
+          fi
+          echo "tag=${TAG}" >> "${GITHUB_OUTPUT}"
+          echo "do_release=${DO}" >> "${GITHUB_OUTPUT}"
+          echo "Resolved tag=${TAG} do_release=${DO} (ref=${GITHUB_REF})"
 
       - name: Cache west workspace
         uses: actions/cache@v4
@@ -65,9 +108,15 @@ jobs:
           name: icebreaker_wireless
           path: icebreaker_wireless.uf2
 
-      - name: Publish release (on version tag)
-        if: startsWith(github.ref, 'refs/tags/icebreaker-wireless-v')
+      - name: Publish release
+        # Fires on a version tag, or on a main/VERSION bump whose release does
+        # not yet exist. On a branch push, action-gh-release creates the tag at
+        # the built commit. Tags created here use GITHUB_TOKEN, so they do not
+        # re-trigger this workflow (no release loop).
+        if: steps.rel.outputs.do_release == 'true'
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ steps.rel.outputs.tag }}
+          name: Icebreaker Wireless ${{ steps.rel.outputs.tag }}
           files: icebreaker_wireless.uf2
           generate_release_notes: true
