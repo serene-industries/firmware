@@ -54,9 +54,16 @@ jobs:
       - name: Clone QMK fork (Matthijs / SmollChungus, dev_cleaver)
         run: git clone --depth 1 -b dev_cleaver https://github.com/SmollChungus/qmk_firmware qmk
 
+      - name: Python deps (fork's QMK predates the container's deps)
+        run: |
+          python3 -m pip install --break-system-packages -r qmk/requirements.txt 2>/dev/null \
+            || python3 -m pip install --break-system-packages appdirs \
+            || python3 -m pip install appdirs
+          git config --global --add safe.directory '*'
+
       - name: Init QMK submodules
         working-directory: qmk
-        run: make git-submodule
+        run: qmk git-submodule || make git-submodule
 
       - name: Overlay hub board sources
         run: |
