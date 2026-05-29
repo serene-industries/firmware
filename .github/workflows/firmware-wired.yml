@@ -61,6 +61,15 @@ jobs:
             || python3 -m pip install appdirs
           git config --global --add safe.directory '*'
 
+      - name: Patch fork QMK python for Python 3.12+ (ast.Num removed)
+        working-directory: qmk
+        run: |
+          # The container's qmk CLI runs on Python 3.12+, where ast.Num/ast.Str
+          # were removed. Matthijs's older fork still uses them in math.py.
+          if [ -f lib/python/qmk/math.py ]; then
+            sed -i -E 's/ast\.Num/ast.Constant/g; s/\bnode\.n\b/node.value/g' lib/python/qmk/math.py
+          fi
+
       - name: Init QMK submodules
         working-directory: qmk
         run: qmk git-submodule || make git-submodule
