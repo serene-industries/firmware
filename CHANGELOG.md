@@ -17,10 +17,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Repository reconciled (2026-05-29).** This repo is now the real firmware hub.
   All four board sources (Icebreaker Wireless / Hotswap / Hall Effect, Cleaver)
   are vendored here from their working repos. See [SOURCES.md](SOURCES.md).
-- Wireless keymap: `HOME`/`END` above the Fn key corrected to `PG_UP`/`PG_DN`
-  (ZMK `icebreaker-studio` @ `e6224af2`).
 - Documented corrected wireless key combinations (bootloader / sleep) — pending
   hardware verification.
+
+> Wireless ZMK changes now ship via tagged releases — see the **1.0.1** entry
+> below for the latest cut.
+
+## Wireless (ZMK) — [1.0.1] - 2026-05-29
+
+### Fixed
+- **ESC key LED glitching after deep sleep.** On boards left idle long enough
+  to reach deep sleep (~15 min), the ESC key (LED #0) would light a random
+  purple/blue color and flicker. Root cause: the WS2812 data line (LED_LV =
+  P0.13) was left floating by the `spi3_sleep` pinctrl, so once the LED power
+  rail (P1.10) was cut on deep-sleep entry the floating line back-fed the first
+  LED's DIN through its protection diode, parasitically powering it. Only LED #0
+  was affected because the rest of the chain is fed from the previous LED's
+  (now unpowered) DOUT. Fixed by adding `bias-pull-down` to the sleep pinctrl so
+  the data line is held low while asleep (ZMK `icebreaker-studio` @ `968db2b`).
+  - The "no rotary encoder connected" correlation in the field reports was
+    incidental: those boards simply sat untouched long enough to reach deep
+    sleep. The encoder pins (P0.29/P0.2) do not touch the LED data line.
+
+### Changed
+- First wireless release cut from the consolidated hub pipeline (built from the
+  `serene-industries/zmk` fork @ `icebreaker-studio`, release hosted here). Also
+  carries the previously-unreleased `HOME`/`END` → `PG_UP`/`PG_DN` keymap fix.
 
 ## Wireless (ZMK) — [0.2.0] - 2026-01-17
 
