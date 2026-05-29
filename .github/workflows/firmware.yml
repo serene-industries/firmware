@@ -35,12 +35,36 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: West init
+        run: west init -l config
+
+      - name: West update
+        run: west update
+
+      - name: West Zephyr export
+        run: west zephyr-export
+
+      - name: Build wireless firmware
+        # Board, keymap, subsystems and core all live in the fork (pulled by
+        # config/west.yml), so this builds the board straight from zmk/app.
+        run: west build -s zmk/app -d build -b icebreaker -S studio-rpc-usb-uart -p always
+
+      - name: Stage artifact
+        run: cp build/zephyr/zmk.uf2 icebreaker_wireless.uf2
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: icebreaker_wireless
+          path: icebreaker_wireless.uf2
+
       - name: Resolve release tag from VERSION
         id: rel
         env:
           GH_TOKEN: ${{ github.token }}
+        # Runs after the build so the artifact always uploads even if this fails.
         # Tolerant by design: guarded so no command aborts the step (GitHub runs
-        # this under `bash -e`). Worst case it falls through to publishing, which
+        # it under `bash -e`); worst case it falls through to publishing, which
         # action-gh-release handles idempotently.
         run: |
           set -uo pipefail
@@ -73,41 +97,6 @@ jobs:
           echo "tag=${TAG}" >> "${GITHUB_OUTPUT}"
           echo "do_release=${DO}" >> "${GITHUB_OUTPUT}"
           echo "Resolved tag=${TAG} do_release=${DO} http=${CODE} ref=${REF}"
-
-      - name: Cache west workspace
-        uses: actions/cache@v4
-        with:
-          path: |
-            modules/
-            tools/
-            zephyr/
-            bootloader/
-            zmk/
-          key: zmk-${{ hashFiles('config/west.yml') }}
-          restore-keys: zmk-
-
-      - name: West init
-        run: west init -l config
-
-      - name: West update
-        run: west update
-
-      - name: West Zephyr export
-        run: west zephyr-export
-
-      - name: Build wireless firmware
-        # Board, keymap, subsystems and core all live in the fork (pulled by
-        # config/west.yml), so this builds the board straight from zmk/app.
-        run: west build -s zmk/app -d build -b icebreaker -S studio-rpc-usb-uart
-
-      - name: Stage artifact
-        run: cp build/zephyr/zmk.uf2 icebreaker_wireless.uf2
-
-      - name: Upload build artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: icebreaker_wireless
-          path: icebreaker_wireless.uf2
 
       - name: Publish release
         # Fires on a version tag, or on a main/VERSION bump whose release does
