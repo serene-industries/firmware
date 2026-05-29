@@ -1,0 +1,91 @@
+name: Firmware (Wired QMK)
+
+# Cloud build for the wired QMK boards (Cleaver HE, Icebreaker HE, Icebreaker
+# Hotswap). Edits to boards/wired/** are overlaid onto Matthijs's QMK fork
+# (SmollChungus/qmk_firmware @ dev_cleaver) and compiled in GitHub Actions.
+#   - Push to main (boards/wired/**) -> build all, upload artifacts.
+#   - Push a tag (cleaver-he-vX / icebreaker-he-vX / icebreaker-hs-vX)
+#     -> build + publish a Release with the matching binary.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'boards/wired/**'
+      - '.github/workflows/firmware-wired.yml'
+    tags:
+      - 'cleaver-he-v*'
+      - 'icebreaker-he-v*'
+      - 'icebreaker-hs-v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container: ghcr.io/qmk/qmk_cli
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - kb: cleaver/hall_effect
+            km: via
+            ext: bin
+            tagprefix: cleaver-he-v
+            out: cleaver_hall_effect_via
+          - kb: icebreaker/hall_effect
+            km: via
+            ext: bin
+            tagprefix: icebreaker-he-v
+            out: icebreaker_hall_effect_via
+          - kb: icebreaker/hotswap
+            km: default
+            ext: uf2
+            tagprefix: icebreaker-hs-v
+            out: icebreaker_hotswap
+    steps:
+      - name: Checkout hub
+        uses: actions/checkout@v4
+        with:
+          path: hub
+
+      - name: Clone QMK fork (Matthijs / SmollChungus, dev_cleaver)
+        run: git clone --depth 1 -b dev_cleaver https://github.com/SmollChungus/qmk_firmware qmk
+
+      - name: Init QMK submodules
+        working-directory: qmk
+        run: make git-submodule
+
+      - name: Overlay hub board sources
+        run: |
+          cp -r hub/boards/wired/cleaver/.               qmk/keyboards/cleaver/
+          cp -r hub/boards/wired/icebreaker_hall_effect/. qmk/keyboards/icebreaker/
+          cp -r hub/boards/wired/icebreaker_hotswap/.     qmk/keyboards/icebreaker/hotswap/
+
+      - name: Compile ${{ matrix.kb }}:${{ matrix.km }}
+        working-directory: qmk
+        run: qmk compile -kb ${{ matrix.kb }} -km ${{ matrix.km }}
+
+      - name: Stage artifact
+        run: |
+          mkdir -p out
+          # qmk writes <kb_with_underscores>_<km>.<ext> into qmk/.build or repo root
+          f=$(ls qmk/*.${{ matrix.ext }} qmk/.build/*.${{ matrix.ext }} 2>/dev/null | head -1)
+          echo "found: $f"
+          cp "$f" "out/${{ matrix.out }}.${{ matrix.ext }}"
+          ls -la out
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.out }}
+          path: out/${{ matrix.out }}.${{ matrix.ext }}
+
+      - name: Publish release (on matching version tag)
+        if: startsWith(github.ref, format('refs/tags/{0}', matrix.tagprefix))
+        uses: softprops/action-gh-release@v2
+        with:
+          files: out/${{ matrix.out }}.${{ matrix.ext }}
+          generate_release_notes: true
