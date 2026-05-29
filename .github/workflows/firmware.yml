@@ -63,39 +63,44 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         # Runs after the build so the artifact always uploads even if this fails.
-        # Tolerant by design: guarded so no command aborts the step (GitHub runs
-        # it under `bash -e`); worst case it falls through to publishing, which
-        # action-gh-release handles idempotently.
+        # POSIX-sh only: this container runs `run:` steps under /bin/sh (dash),
+        # which rejects `set -o pipefail` and `[[ ]]` (that was the exit-2 here),
+        # so no bashisms. Guarded so nothing aborts under `-e`; worst case it
+        # falls through to publishing, which action-gh-release handles idempotently.
         run: |
-          set -uo pipefail
           REF="${GITHUB_REF:-}"
           CODE="n/a"
-          if [[ "${REF}" == refs/tags/icebreaker-wireless-v* ]]; then
-            # Tag push: release exactly that tag.
-            TAG="${REF#refs/tags/}"
-            DO=true
-          else
-            # Branch push / manual run: derive the tag from VERSION and only
-            # publish if that release doesn't already exist (idempotent — a
-            # plain config change re-builds the artifact but won't re-release).
-            VERSION_FILE="${GITHUB_WORKSPACE:-.}/VERSION"
-            VER="$(grep -E '^[[:space:]]*icebreaker-wireless[[:space:]]' "${VERSION_FILE}" 2>/dev/null | awk '{print $2}' || true)"
-            if [[ -z "${VER}" ]]; then
-              echo "ERROR: could not read icebreaker-wireless version from ${VERSION_FILE}" >&2
-              exit 1
-            fi
-            TAG="icebreaker-wireless-v${VER}"
-            API="https://api.github.com/repos/${GITHUB_REPOSITORY}/releases/tags/${TAG}"
-            CODE="$(curl -s -o /dev/null -w '%{http_code}' \
-              -H "Authorization: Bearer ${GH_TOKEN}" \
-              -H "Accept: application/vnd.github+json" "${API}" 2>/dev/null || true)"
-            [[ -z "${CODE}" ]] && CODE="000"
-            # Only an explicit 200 (release already exists) skips publishing;
-            # 404 or any transient/non-200 falls through to publish.
-            if [[ "${CODE}" == "200" ]]; then DO=false; else DO=true; fi
-          fi
-          echo "tag=${TAG}" >> "${GITHUB_OUTPUT}"
-          echo "do_release=${DO}" >> "${GITHUB_OUTPUT}"
+          case "$REF" in
+            refs/tags/icebreaker-wireless-v*)
+              # Tag push: release exactly that tag.
+              TAG="${REF#refs/tags/}"
+              DO=true
+              ;;
+            *)
+              # Branch push / manual run: derive the tag from VERSION and only
+              # publish if that release doesn't already exist (idempotent — a
+              # plain config change re-builds the artifact but won't re-release).
+              VERSION_FILE="${GITHUB_WORKSPACE:-.}/VERSION"
+              VER="$(grep -E '^[[:space:]]*icebreaker-wireless[[:space:]]' "$VERSION_FILE" 2>/dev/null | awk '{print $2}' || true)"
+              if [ -z "$VER" ]; then
+                echo "ERROR: could not read icebreaker-wireless version from $VERSION_FILE" >&2
+                exit 1
+              fi
+              TAG="icebreaker-wireless-v${VER}"
+              API="https://api.github.com/repos/${GITHUB_REPOSITORY}/releases/tags/${TAG}"
+              CODE="$(curl -s -o /dev/null -w '%{http_code}' \
+                -H "Authorization: Bearer ${GH_TOKEN}" \
+                -H "Accept: application/vnd.github+json" "$API" 2>/dev/null || true)"
+              if [ -z "$CODE" ]; then CODE="000"; fi
+              # Only an explicit 200 (release already exists) skips publishing;
+              # 404 or any transient/non-200 falls through to publish.
+              if [ "$CODE" = "200" ]; then DO=false; else DO=true; fi
+              ;;
+          esac
+          {
+            echo "tag=${TAG}"
+            echo "do_release=${DO}"
+          } >> "$GITHUB_OUTPUT"
           echo "Resolved tag=${TAG} do_release=${DO} http=${CODE} ref=${REF}"
 
       - name: Publish release
