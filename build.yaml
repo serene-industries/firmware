@@ -1,6 +1,8 @@
 # Cloud build matrix for Serene wireless firmware.
-# Edit the board files in config/boards/arm/icebreaker/ and push;
-# tag icebreaker-wireless-vX.Y.Z to cut a release the configurator serves.
+# Wireless SOURCE (board, keymap, subsystems, core) lives in the fork:
+#   serene-industries/zmk @ icebreaker-studio  (pulled by config/west.yml)
+# This repo builds it and hosts the releases the configurator serves.
+# Tag icebreaker-wireless-vX.Y.Z to cut a release.
 include:
   - board: icebreaker
     snippet: studio-rpc-usb-uart

@@ -10,7 +10,7 @@ vendored here (copied in) from their upstream working repos; see
 
 | Keyboard | Stack | Source | Release |
 |---|---|---|---|
-| **Icebreaker Wireless** | ZMK (nRF52840) | `config/boards/arm/icebreaker/` | auto-built in CI → Releases (.uf2) |
+| **Icebreaker Wireless** | ZMK (nRF52840) | [`serene-industries/zmk`](https://github.com/serene-industries/zmk) @ `icebreaker-studio` | auto-built in CI → Releases (.uf2) |
 | **Icebreaker Hotswap** | QMK / VIA | `boards/wired/icebreaker_hotswap/` | Releases page (.uf2) |
 | **Icebreaker Hall Effect** | QMK / VIA | `boards/wired/icebreaker_hall_effect/` | Releases page (.bin) |
 | **Cleaver Hall Effect** | QMK / VIA | `boards/wired/cleaver/` | Releases page (.bin) |
@@ -20,20 +20,29 @@ vendored here (copied in) from their upstream working repos; see
 The wireless firmware **compiles in GitHub Actions** — you never need a local
 toolchain or the Mac.
 
-1. Edit the board/keymap under `config/boards/arm/icebreaker/` (from any Claude
-   Code session, web, or the GitHub UI) and push to `main`.
-   → CI compiles it and uploads `icebreaker_wireless.uf2` as a build artifact.
-2. When it's good, cut a release by pushing a version tag:
-   ```bash
-   git tag icebreaker-wireless-v0.2.1 && git push origin icebreaker-wireless-v0.2.1
-   ```
-   → CI compiles and **publishes a GitHub Release** with the `.uf2`.
-3. The **si-configurator** reads releases from this repo by tag prefix
-   (`icebreaker-wireless-v…`), so the new firmware appears in the configurator
-   within minutes. No Vercel rebuild, no local build.
+**All wireless source lives in the fork** `serene-industries/zmk` @ branch
+`icebreaker-studio` — board, keymap, Studio subsystems, and ZMK core together:
+- keymap / layout / board → `app/boards/arm/icebreaker/`
+- subsystem behavior (BLE, lighting, stats) → `app/src/studio/`
+- RGB engine / core → `app/src/rgb_underglow.c`
+- custom RPC message protos → `serene-industries/zmk-studio-messages` (pulled by west)
 
-The ZMK core (with our patches) is pulled by `config/west.yml` from
-`serene-industries/zmk@icebreaker-studio`; the board itself lives here.
+To ship:
+
+1. Edit in the fork (`icebreaker-studio`) — any Claude session, web, or GitHub UI.
+2. To get an artifact, run this repo's **Firmware (Wireless)** workflow (it pulls
+   the fork and compiles), or just go to step 3.
+3. Cut a release by pushing a version tag **here in the hub**:
+   ```bash
+   git tag icebreaker-wireless-v1.0.1 && git push origin icebreaker-wireless-v1.0.1
+   ```
+   → CI compiles from the fork and **publishes a GitHub Release** with the `.uf2`.
+4. The **si-configurator** reads releases from this repo by tag prefix
+   (`icebreaker-wireless-v…`), so the new firmware appears within minutes.
+   No Vercel rebuild, no local build.
+
+`config/west.yml` here just points the build at the fork; this repo carries no
+wireless source of its own.
 
 ## Download
 
@@ -64,21 +73,21 @@ or grab a pre-built wireless `.uf2` from `releases/wireless/`.
 ## Repository Structure
 
 ```
-build.yaml                      Cloud build matrix (board + ZMK Studio snippet)
-config/
-  west.yml                      Pulls patched ZMK from serene-industries/zmk
-  boards/arm/icebreaker/        ← EDIT WIRELESS HERE (dts, keymap, defconfig, …)
+build.yaml                          Cloud build matrix (board + ZMK Studio snippet)
+config/west.yml                     Points the wireless build at the zmk fork
 boards/
-  wired/icebreaker_hotswap/     QMK board (VIA)
-  wired/icebreaker_hall_effect/ QMK board (VIA) + shared icebreaker_rgb
-  wired/cleaver/                QMK board (VIA) + shared cleaver_rgb
-zmk-app-src/studio/             ZMK Studio subsystems mirror (app-level; SOURCES.md)
-patches/                        Standalone patches (also baked into the fork core)
-releases/wireless/              Pre-built wireless .uf2 (pre-CI history)
-.github/workflows/firmware.yml  Cloud build + auto-release
-SOURCES.md                      Provenance + build instructions
-CHANGELOG.md                    Release notes
-VERSION                         Wireless firmware version
+  wired/icebreaker_hotswap/         QMK board (VIA)            ← edit wired here
+  wired/icebreaker_hall_effect/     QMK board (VIA) + icebreaker_rgb
+  wired/cleaver/                    QMK board (VIA) + cleaver_rgb
+patches/                            Standalone patches (also baked into fork core)
+releases/                           Pre-built binaries (wireless .uf2, wired .bin)
+.github/workflows/firmware.yml      Cloud build + auto-release (wireless / ZMK)
+.github/workflows/firmware-wired.yml Cloud build + auto-release (wired / QMK)
+SOURCES.md                          Provenance + build instructions
+CHANGELOG.md                        Release notes
+VERSION                             Per-board shipped versions
+
+Wireless source is NOT here — it's in serene-industries/zmk @ icebreaker-studio.
 ```
 
 ## Building

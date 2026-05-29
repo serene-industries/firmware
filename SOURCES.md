@@ -10,36 +10,34 @@ and how to rebuild. Reconciliation date: **2026-05-29**.
 
 ## Wireless — ZMK
 
-- **`boards/wireless/icebreaker/`**
-  - From: `serene-industries/zmk`, branch `icebreaker-studio`
-  - Commit: `e6224af2` ("Fix keymap: Change HOME/END to PG_UP/PG_DN")
-  - Path upstream: `app/boards/arm/icebreaker/`
-- **`zmk-app-src/studio/`** — app-level ZMK Studio subsystems (cannot build
-  standalone; they belong in `app/src/studio/` of the ZMK tree). Includes
-  `ble_subsystem.c` (BLE profile management RPC), `lighting_subsystem.c`, `rpc.c`.
-  - From the same `serene-industries/zmk@e6224af2`, path `app/src/studio/`.
-- **`patches/0001-fix-rgb-underglow-settings-persistence.patch`**
-  - From the now-retired overlay repo `-icebreaker-zmk-studio-firmware@dff5533`.
+**All wireless source lives in the fork `serene-industries/zmk` @ `icebreaker-studio`**
+— it is NOT vendored into this hub. The hub only builds it (`config/west.yml`
+points at the fork) and hosts the releases.
+
+In the fork:
+- `app/boards/arm/icebreaker/` — board, keymap, defconfig
+- `app/src/studio/` — Studio subsystems: `ble_subsystem.c`, `lighting_subsystem.c`,
+  `stats_subsystem.c` (disabled), `rpc.c` routing
+- `app/src/rgb_underglow.c` (+ header) — RGB engine / core change (RGB persistence)
+- `app/west.yml` — pulls Zephyr/modules + the custom protos repo
+  `serene-industries/zmk-studio-messages` (lighting/ble/stats `.proto`)
+
+`patches/0001-fix-rgb-underglow-settings-persistence.patch` (kept here for
+reference) is already baked into the fork's core, so no patch step is needed.
 
 ### Build (wireless)
 
+The hub CI does this automatically. To build locally from the fork:
+
 ```bash
-west init -l zmk/app && west update
-cd zmk && git apply ../patches/*.patch
-cp -r ../boards/wireless/icebreaker app/boards/arm/icebreaker
-# copy the studio subsystems into the app tree as well:
-cp ../zmk-app-src/studio/* app/src/studio/
-west build -p -b icebreaker -S studio-rpc-usb-uart app \
-  -- -DZMK_CONFIG="$(pwd)/app/boards/arm/icebreaker"
+git clone -b icebreaker-studio https://github.com/serene-industries/zmk
+cd zmk && west init -l app && west update && west zephyr-export
+west build -s app -b icebreaker -S studio-rpc-usb-uart
 # output: build/zephyr/zmk.uf2
 ```
 
-> Uncommitted local WIP existed at reconciliation time (an `rgb_underglow.c`
-> rework +184 lines, a new `stats_subsystem.c` typing-stats subsystem, and
-> `SUBSYSTEM_ROADMAP.md`). Per decision, only the committed keymap fix was made
-> canonical. That WIP is **not** vendored here; it is preserved on
-> `serene-industries/zmk` branches `backup/icebreaker-studio-wip-20260529` and
-> `backup/icebreaker-stash-alt-variant-20260529`.
+> Backups from the reconciliation are on `serene-industries/zmk` branches
+> `backup/icebreaker-studio-wip-20260529` and `backup/icebreaker-stash-alt-variant-20260529`.
 
 ## Wired — QMK
 

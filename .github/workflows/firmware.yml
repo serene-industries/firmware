@@ -52,10 +52,9 @@ jobs:
         run: west zephyr-export
 
       - name: Build wireless firmware
-        run: |
-          west build -s zmk/app -d build -b icebreaker -S studio-rpc-usb-uart -- \
-            -DZMK_CONFIG="${GITHUB_WORKSPACE}/config" \
-            -DBOARD_ROOT="${GITHUB_WORKSPACE}/config"
+        # Board, keymap, subsystems and core all live in the fork (pulled by
+        # config/west.yml), so this builds the board straight from zmk/app.
+        run: west build -s zmk/app -d build -b icebreaker -S studio-rpc-usb-uart
 
       - name: Stage artifact
         run: cp build/zephyr/zmk.uf2 icebreaker_wireless.uf2
