@@ -3,9 +3,17 @@ manifest:
     - name: serene-industries
       url-base: https://github.com/serene-industries
   projects:
+    # Patched ZMK core (RGB persistence, custom Studio subsystems, the board's
+    # app-level sources). Imports zephyr + modules via the fork's app/west.yml.
     - name: zmk
       remote: serene-industries
       revision: icebreaker-studio
       import: app/west.yml
+    # Override the studio-messages module with our fork that adds the custom
+    # lighting/ble/stats protos (main manifest wins over the imported one).
+    - name: zmk-studio-messages
+      remote: serene-industries
+      revision: 6539cbf2c1fc59ebd164181d78af4d6eebd71646
+      path: modules/msgs/zmk-studio-messages
   self:
     path: config
