@@ -39,39 +39,40 @@ jobs:
         id: rel
         env:
           GH_TOKEN: ${{ github.token }}
+        # Tolerant by design: guarded so no command aborts the step (GitHub runs
+        # this under `bash -e`). Worst case it falls through to publishing, which
+        # action-gh-release handles idempotently.
         run: |
-          set -euo pipefail
-          if [[ "${GITHUB_REF}" == refs/tags/icebreaker-wireless-v* ]]; then
+          set -uo pipefail
+          REF="${GITHUB_REF:-}"
+          CODE="n/a"
+          if [[ "${REF}" == refs/tags/icebreaker-wireless-v* ]]; then
             # Tag push: release exactly that tag.
-            TAG="${GITHUB_REF#refs/tags/}"
+            TAG="${REF#refs/tags/}"
             DO=true
           else
             # Branch push / manual run: derive the tag from VERSION and only
             # publish if that release doesn't already exist (idempotent — a
             # plain config change re-builds the artifact but won't re-release).
-            VER="$(grep -E '^[[:space:]]*icebreaker-wireless[[:space:]]' VERSION | awk '{print $2}')"
+            VERSION_FILE="${GITHUB_WORKSPACE:-.}/VERSION"
+            VER="$(grep -E '^[[:space:]]*icebreaker-wireless[[:space:]]' "${VERSION_FILE}" 2>/dev/null | awk '{print $2}' || true)"
+            if [[ -z "${VER}" ]]; then
+              echo "ERROR: could not read icebreaker-wireless version from ${VERSION_FILE}" >&2
+              exit 1
+            fi
             TAG="icebreaker-wireless-v${VER}"
             API="https://api.github.com/repos/${GITHUB_REPOSITORY}/releases/tags/${TAG}"
-            if command -v curl >/dev/null 2>&1; then
-              CODE="$(curl -s -o /dev/null -w '%{http_code}' \
-                -H "Authorization: Bearer ${GH_TOKEN}" \
-                -H "Accept: application/vnd.github+json" "${API}")"
-            elif command -v wget >/dev/null 2>&1; then
-              CODE="$(wget -q -S -O /dev/null \
-                --header="Authorization: Bearer ${GH_TOKEN}" \
-                --header="Accept: application/vnd.github+json" "${API}" 2>&1 \
-                | awk '/HTTP\//{c=$2} END{print c+0}')"
-            else
-              CODE="000"
-            fi
+            CODE="$(curl -s -o /dev/null -w '%{http_code}' \
+              -H "Authorization: Bearer ${GH_TOKEN}" \
+              -H "Accept: application/vnd.github+json" "${API}" 2>/dev/null || true)"
+            [[ -z "${CODE}" ]] && CODE="000"
             # Only an explicit 200 (release already exists) skips publishing;
-            # 404 or any transient/non-200 falls through to publish (re-publish
-            # is idempotent — action-gh-release updates the existing release).
+            # 404 or any transient/non-200 falls through to publish.
             if [[ "${CODE}" == "200" ]]; then DO=false; else DO=true; fi
           fi
           echo "tag=${TAG}" >> "${GITHUB_OUTPUT}"
           echo "do_release=${DO}" >> "${GITHUB_OUTPUT}"
-          echo "Resolved tag=${TAG} do_release=${DO} (ref=${GITHUB_REF})"
+          echo "Resolved tag=${TAG} do_release=${DO} http=${CODE} ref=${REF}"
 
       - name: Cache west workspace
         uses: actions/cache@v4
