@@ -40,6 +40,11 @@ jobs:
             ext: bin
             tagprefix: cleaver-he-v
             out: cleaver_hall_effect_via
+          - kb: cleaver/hall_effect
+            km: mac
+            ext: bin
+            tagprefix: cleaver-he-v
+            out: cleaver_hall_effect_mac
           - kb: icebreaker/hall_effect
             km: via
             ext: bin
