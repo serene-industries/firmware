@@ -28,3 +28,6 @@ Enter the bootloader in 2 ways:
 
 Note: Bootmagic (hold a key while plugging in) is **disabled** on this board
 (`"bootmagic": false` in `keyboard.json`), so that method does not work.
+
+To exit bootloader mode without flashing, just unplug the keyboard and plug it
+back in.
