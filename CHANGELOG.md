@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Cleaver Hall Effect — 0.4.2.5
+
+### Fixed
+- **Wake from sleep needed 4–5 presses.** Waking a sleeping host over USB
+  relied on `matrix_scan()` reporting a key down, but `he_update_key()` only
+  sets the matrix bit after `DEBOUNCE_THRESHOLD` (5) consecutive pressed scans.
+  During USB suspend the scan loop is throttled by `suspend_power_down()`, so
+  those scans are far apart and the counter resets between quick taps — a single
+  tap never reached 5. Track USB suspend state via the weak
+  `suspend_power_down_kb()`/`suspend_wakeup_init_kb()` hooks and bypass the
+  debounce in `he_matrix_scan()` while suspended, so the first press past the
+  actuation threshold wakes the host.
+
 ### Cleaver Hall Effect — 0.4.2.4
 - Re-vendored from `SmollChungus/qmk_firmware@28a538cf` (dev_cleaver, 2026-04-28),
   the latest Cleaver line by Matthijs Muller. Includes the **row fix** ("rotate
