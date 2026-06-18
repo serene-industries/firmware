@@ -424,6 +424,10 @@ bool he_update_key_keycancel(matrix_row_t* current_matrix, uint8_t row, uint8_t 
 
 
 
+// Set true while the USB host is suspended (see the suspend hooks below). Used
+// by he_matrix_scan() to wake the host on the first press, bypassing debounce.
+static volatile bool he_suspended = false;
+
 bool he_matrix_scan(void) {
     bool updated = false;
 
@@ -439,6 +443,21 @@ bool he_matrix_scan(void) {
         uint8_t col = sensor_to_matrix_map[i].col;
         uint16_t sensor_value = he_readkey_raw(sensor_id);
 
+        if (he_suspended) {
+            // Host is asleep: wake it on the FIRST press. Bypass the multi-scan
+            // debounce and set the matrix bit as soon as a key crosses its
+            // actuation threshold. debounced_state is set too so the post-wake
+            // scan reconciles the release normally (no stuck key).
+            key_debounce_t *ki = &debounce_matrix[row][col];
+            if (!ki->debounced_state &&
+                rescale(sensor_value, sensor_id) > he_key_configs[sensor_id].he_actuation_threshold) {
+                ki->debounced_state = true;
+                matrix[row] |= (1UL << col);
+                ki->debounce_counter = 0;
+                updated = true;
+            }
+            continue;
+        }
 
         if (he_config.he_actuation_mode == 0) {
             if (he_update_key(matrix, row, col, sensor_id, sensor_value)) {
@@ -462,24 +481,25 @@ bool he_matrix_scan(void) {
 /*
  * Wake the host on the FIRST press while USB is suspended.
  *
- * QMK's suspend loop calls suspend_wakeup_condition() to decide whether to
- * issue a USB remote wakeup. The default implementation relies on matrix_scan()
- * having set a matrix bit, but our he_update_key() only sets that bit after a
- * key reads pressed for DEBOUNCE_THRESHOLD (5) consecutive scans. During
- * suspend the scan loop is throttled by suspend_power_down(), so those 5 scans
- * are far apart and the debounce counter resets between quick taps - which is
- * why waking took several presses. Read the sensors directly here and wake as
- * soon as any key crosses its actuation threshold, bypassing the debounce.
+ * The Cleaver needed several presses to wake a sleeping PC. QMK's suspend loop
+ * wakes the host once matrix_scan() reports a key down, but he_update_key()
+ * only sets the matrix bit after DEBOUNCE_THRESHOLD (5) consecutive pressed
+ * scans. During suspend the scan loop is throttled by suspend_power_down(), so
+ * those scans are far apart and the counter resets between quick taps - so a
+ * single tap never reached 5.
+ *
+ * suspend_wakeup_condition() is NOT weak in this QMK fork, so we can't override
+ * it. Instead we track suspend state via these always-weak hooks and bypass the
+ * debounce in he_matrix_scan() while suspended.
  */
-bool suspend_wakeup_condition(void) {
-    for (uint8_t i = 0; i < SENSOR_COUNT; i++) {
-        uint8_t sensor_id = sensor_to_matrix_map[i].sensor_id;
-        if (rescale(he_readkey_raw(sensor_id), sensor_id)
-                > he_key_configs[sensor_id].he_actuation_threshold) {
-            return true;
-        }
-    }
-    return false;
+void suspend_power_down_kb(void) {
+    he_suspended = true;
+    suspend_power_down_user();
+}
+
+void suspend_wakeup_init_kb(void) {
+    he_suspended = false;
+    suspend_wakeup_init_user();
 }
 
 // Debug stuff
