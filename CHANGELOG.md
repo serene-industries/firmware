@@ -10,15 +10,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Cleaver Hall Effect — 0.4.2.5
 
 ### Fixed
-- **Wake from sleep needed 4–5 presses.** Waking a sleeping host over USB
-  relied on `matrix_scan()` reporting a key down, but `he_update_key()` only
-  sets the matrix bit after `DEBOUNCE_THRESHOLD` (5) consecutive pressed scans.
-  During USB suspend the scan loop is throttled by `suspend_power_down()`, so
-  those scans are far apart and the counter resets between quick taps — a single
-  tap never reached 5. Track USB suspend state via the weak
-  `suspend_power_down_kb()`/`suspend_wakeup_init_kb()` hooks and bypass the
-  debounce in `he_matrix_scan()` while suspended, so the first press past the
-  actuation threshold wakes the host.
+- **Waking the computer needed several key presses.** Waking a sleeping computer
+  from the keyboard could take 4–5 presses; a single press now reliably wakes the
+  host.
 
 ### Cleaver Hall Effect — 0.4.2.4
 - Re-vendored from `SmollChungus/qmk_firmware@28a538cf` (dev_cleaver, 2026-04-28),
@@ -43,15 +37,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Wireless (ZMK) — [1.0.2] - 2026-06-03
 
 ### Fixed
-- **Blue status LED stayed lit constantly (and through sleep).** `LED_BOOT`
-  (P1.00) was driven solid whenever BLE was connected, and the indicator never
-  watched activity state — so on deep sleep the GPIO latched on, leaving the LED
-  lit while asleep and draining the battery. `bt_indicator` now subscribes to
-  `zmk_activity_state_changed` and turns the status LEDs off on idle/sleep,
-  restoring the connection indicator on wake. The LED now lights only while the
-  board is in use (ZMK `icebreaker-studio` @ `658a71e`).
-  - Note: these are on/off GPIO LEDs (no PWM), and in deep sleep the SoC is
-    fully powered down, so "off" is the only low-power state available there.
+- **Blue status LED stayed lit constantly (and during sleep).** The blue
+  "connected" light no longer stays on around the clock or while the keyboard is
+  asleep — it now lights only while the keyboard is in use, which also removes
+  the related battery drain.
 
 ## Wireless (ZMK) — [1.0.1] - 2026-05-29
 
