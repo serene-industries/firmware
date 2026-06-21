@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Cleaver Hall Effect — 0.4.2.6
+
+### Added
+- **macOS layout option.** A Mac layout (Command sits next to the spacebar) is now
+  available alongside the default Windows layout — selectable in the configurator's
+  Firmware tab.
+
+### Changed
+- **Default lighting is now solid green at full brightness.** Applies on a fresh
+  install or after resetting keyboard settings; existing custom colors are kept.
+
 ### Cleaver Hall Effect — 0.4.2.5
 
 ### Fixed

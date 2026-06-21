@@ -28,9 +28,9 @@
 
 // RGB Defaults
 #define RGBLIGHT_DEFAULT_MODE RGBLIGHT_MODE_STATIC_LIGHT
-#define RGBLIGHT_DEFAULT_HUE 0
-#define RGBLIGHT_DEFAULT_SAT 0
-#define RGBLIGHT_DEFAULT_VAL 50
+#define RGBLIGHT_DEFAULT_HUE 100   // solid green (QMK 0-255 hue)
+#define RGBLIGHT_DEFAULT_SAT 255   // 100% saturation
+#define RGBLIGHT_DEFAULT_VAL 255   // 100% brightness
 #define RGBLIGHT_SLEEP
 //debug stuff
 #define CONSOLE_VERBOSITY 1 //undef to turn of
