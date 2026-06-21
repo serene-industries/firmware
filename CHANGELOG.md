@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Cleaver Hall Effect — 0.4.2.7
+
+### Changed
+- **Windows layout: the key right of the spacebar (was right-side ⌘/Win) is now a
+  Fn key.** Fn is now reachable on the bottom row as well as next to the arrow keys.
+
 ### Cleaver Hall Effect — 0.4.2.6
 
 ### Added

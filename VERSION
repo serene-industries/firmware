@@ -2,6 +2,6 @@
 # These match the GitHub Release tag the configurator serves (tag prefix + version).
 # To ship a new build, tag <prefix>-v<next-version> and bump here.
 icebreaker-wireless 1.0.2    # tag icebreaker-wireless-v1.0.2  (CI-buildable; next would be 1.0.3)
-cleaver-he          0.4.2.6  # tag cleaver-he-v0.4.2.6
+cleaver-he          0.4.2.7  # tag cleaver-he-v0.4.2.7
 icebreaker-he       1.0.0    # tag icebreaker-he-v1.0.0
 icebreaker-hs       1.0.0    # tag icebreaker-hs-v1.0.0
