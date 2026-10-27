@@ -2,6 +2,13 @@
 
 #pragma once
 
+// Firmware identity — read by the Si Configurator over stock VIA
+// (id_get_keyboard_value / id_firmware_version). Encoding: one byte per
+// version field, big-endian: 0.4.2.6 -> 0x00040206.
+// !! BUMP THIS WITH EVERY RELEASE !! A board reporting 0 is running
+// firmware from before this define existed ("unversioned").
+#define VIA_FIRMWARE_VERSION 0x00040206
+
 
 // PWM + DMA setup on PA8
 #define WS2812_DI_PIN A8
