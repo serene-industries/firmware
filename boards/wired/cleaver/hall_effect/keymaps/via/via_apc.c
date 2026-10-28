@@ -22,6 +22,9 @@
 #include "print.h"
 #include "eeprom.h"
 #include "cleaver_rgb.h"
+#include "raw_hid.h"
+#include "wait.h"
+#include "bootloader.h"
 #ifdef VIA_ENABLE
 
 uint16_t eeprom_save_timer = 0;
@@ -45,6 +48,23 @@ enum via_he_enums {
     id_set_rapid_trigger_disengage_distance = 9,
     // clang-format on
 };
+
+// The fork's quantum/via.c dropped the standard id_bootloader_jump (0x0B)
+// handler that stock QMK ships, which the configurator's browser flasher
+// depends on for one-click updates. Restore it at the keyboard level via
+// the via_command_kb() hook (it runs before the core command switch).
+// Remove this if/when the core handler is restored in quantum/via.c.
+bool via_command_kb(uint8_t *data, uint8_t length) {
+    if (data[0] == id_bootloader_jump) {
+        // Ack first so the host knows the command was accepted,
+        // then give it time to read before the USB device vanishes.
+        raw_hid_send(data, length);
+        wait_ms(100);
+        bootloader_jump();
+        return true;
+    }
+    return false;
+}
 
 
     // On Keyboard startup
