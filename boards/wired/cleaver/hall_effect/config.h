@@ -4,10 +4,12 @@
 
 // Firmware identity — read by the Si Configurator over stock VIA
 // (id_get_keyboard_value / id_firmware_version). Encoding: one byte per
-// version field, big-endian: 0.4.2.6 -> 0x00040206.
-// !! BUMP THIS WITH EVERY RELEASE !! A board reporting 0 is running
-// firmware from before this define existed ("unversioned").
-#define VIA_FIRMWARE_VERSION 0x00040206
+// version field, big-endian: 0.4.2.9 -> 0x00040209.
+// CI injects the real value from the release tag (-DVIA_FIRMWARE_VERSION=...);
+// this fallback marks local/untagged builds as "unversioned" (0).
+#ifndef VIA_FIRMWARE_VERSION
+#define VIA_FIRMWARE_VERSION 0
+#endif
 
 
 // PWM + DMA setup on PA8

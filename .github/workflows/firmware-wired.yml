@@ -110,7 +110,18 @@ jobs:
 
       - name: Compile ${{ matrix.kb }}:${{ matrix.km }}
         working-directory: qmk
-        run: qmk compile -kb ${{ matrix.kb }} -km ${{ matrix.km }} ${{ matrix.extra }}
+        run: |
+          # Firmware reports its version over VIA. Derive it from the release
+          # tag (one byte per dotted field, e.g. 0.4.2.9 -> 0x00040209);
+          # untagged builds report 0 ("unversioned").
+          tag="${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || github.event.inputs.publish }}"
+          ver="${tag#${{ matrix.tagprefix }}}"
+          hexver=0
+          if [ -n "$tag" ]; then
+            hexver=$(python3 -c "import sys; f=[int(x) for x in sys.argv[1].split('.')]; f=(f+[0,0,0,0])[:4]; print('0x%02X%02X%02X%02X' % tuple(f))" "$ver")
+          fi
+          echo "VIA_FIRMWARE_VERSION=$hexver"
+          qmk compile -kb ${{ matrix.kb }} -km ${{ matrix.km }} ${{ matrix.extra }} -e EXTRAFLAGS="-DVIA_FIRMWARE_VERSION=$hexver"
 
       - name: Stage artifact
         id: stage
