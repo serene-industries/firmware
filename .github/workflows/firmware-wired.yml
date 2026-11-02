@@ -27,6 +27,11 @@ on:
 permissions:
   contents: write
 
+      prerelease:
+        description: 'Mark the release as a prerelease (hidden from the configurator while a stable release exists)'
+        type: boolean
+        default: false
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -140,3 +145,4 @@ jobs:
           tag_name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || github.event.inputs.publish }}
           files: out/${{ steps.stage.outputs.name }}
           generate_release_notes: true
+          prerelease: ${{ github.event.inputs.prerelease == 'true' }}
