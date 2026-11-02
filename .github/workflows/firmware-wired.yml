@@ -23,14 +23,14 @@ on:
         description: 'Version tag to publish (e.g. cleaver-he-v0.4.2.5). Leave blank to build artifacts only.'
         required: false
         default: ''
-
-permissions:
-  contents: write
-
       prerelease:
         description: 'Mark the release as a prerelease (hidden from the configurator while a stable release exists)'
         type: boolean
         default: false
+
+permissions:
+  contents: write
+
 
 jobs:
   build:
