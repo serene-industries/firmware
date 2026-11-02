@@ -2,16 +2,15 @@
 #include "he_switch_matrix.h"
 
 #ifdef CLEAVER_LED_ORDER_REVERSED
-// LED chain order for the production batch whose calibration lights the
-// wrong keys with the standard table (rows 1-3 run right-to-left, row 3
-// shifted by one). PROVISIONAL: derived from partial press observations;
-// replace with the measured table before release. Built by CI as the
-// *_reversed_leds assets (-e CLEAVER_LED_ORDER_REVERSED=yes).
+// LED chain order for the original production PCB batch (pre-"0.4.2 row
+// fix" routing): rows 1 and 3 run right-to-left, rows 0/2/4 left-to-right.
+// Measured on hardware 2026-11-02 via calibration presses. Built by CI as
+// the *_reversed_leds assets (-e CLEAVER_LED_ORDER_REVERSED=yes).
 static const uint8_t sensor_to_led_map[SENSOR_COUNT] = {
     0,  1,  2,  3,  4,  5,  6,  7,  8,  9,  10, 11, 12, 13, 14,
     29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15,              // Row 1 mirrored
-    43, 42, 41, 40, 39, 38, 37, 36, 35, 34, 33, 32, 31, 30,                  // Row 2 mirrored
-    56, 55, 54, 53, 52, 51, 50, 49, 48, 47, 46, 45, 44, 57,                  // Row 3 mirrored, shifted (TODO verify)
+    30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43,                  // Row 2
+    57, 56, 55, 54, 53, 52, 51, 50, 49, 48, 47, 46, 45, 44,                  // Row 3 mirrored
     58, 59, 60, 61, 62, 63, 64, 65, 66, 67                                   // Row 4
 };
 #else
