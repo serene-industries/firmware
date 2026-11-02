@@ -43,6 +43,10 @@ enum via_he_enums {
     id_set_rapid_trigger_deadzone = 7,
     id_set_rapid_trigger_engage_distance = 8,
     id_set_rapid_trigger_disengage_distance = 9,
+    // Read-only: which LED chain table this build carries (0 standard,
+    // 1 reversed/original-batch). The configurator's browser flasher uses
+    // it to pick the matching firmware asset.
+    id_get_led_variant = 20,
     // clang-format on
 };
 
@@ -252,6 +256,13 @@ void via_he_config_get_value(uint8_t *data) {
             uprintf("Release distance requested - id, data (%d, %d %d)\n", value_id, value_data[0], value_data[1]);
             break;
         }
+        case id_get_led_variant:
+#ifdef CLEAVER_LED_ORDER_REVERSED
+            value_data[0] = 1;
+#else
+            value_data[0] = 0;
+#endif
+            break;
         default:
             uprintf("Unhandled ID %d in via_he_config_get_value\n", value_id);
     }
