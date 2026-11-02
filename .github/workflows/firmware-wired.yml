@@ -117,7 +117,9 @@ jobs:
           tag="${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || github.event.inputs.publish }}"
           ver="${tag#${{ matrix.tagprefix }}}"
           hexver=0
-          if [ -n "$tag" ]; then
+          # Only a tag for THIS board carries its version; other boards in the
+          # matrix build unversioned (they are not published on this tag).
+          if [ -n "$tag" ] && [ "$ver" != "$tag" ]; then
             hexver=$(python3 -c "import sys; f=[int(x) for x in sys.argv[1].split('.')]; f=(f+[0,0,0,0])[:4]; print('0x%02X%02X%02X%02X' % tuple(f))" "$ver")
           fi
           echo "VIA_FIRMWARE_VERSION=$hexver"
