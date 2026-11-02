@@ -45,6 +45,19 @@ jobs:
             ext: bin
             tagprefix: cleaver-he-v
             out: cleaver_hall_effect_mac
+          # Reversed-LED-chain batch (see cleaver_rgb.c CLEAVER_LED_ORDER_REVERSED)
+          - kb: cleaver/hall_effect
+            km: via
+            ext: bin
+            tagprefix: cleaver-he-v
+            out: cleaver_hall_effect_via_reversed_leds
+            extra: -e CLEAVER_LED_ORDER_REVERSED=yes
+          - kb: cleaver/hall_effect
+            km: mac
+            ext: bin
+            tagprefix: cleaver-he-v
+            out: cleaver_hall_effect_mac_reversed_leds
+            extra: -e CLEAVER_LED_ORDER_REVERSED=yes
           - kb: icebreaker/hall_effect
             km: via
             ext: bin
@@ -92,22 +105,27 @@ jobs:
 
       - name: Compile ${{ matrix.kb }}:${{ matrix.km }}
         working-directory: qmk
-        run: qmk compile -kb ${{ matrix.kb }} -km ${{ matrix.km }}
+        run: qmk compile -kb ${{ matrix.kb }} -km ${{ matrix.km }} ${{ matrix.extra }}
 
       - name: Stage artifact
+        id: stage
         run: |
           mkdir -p out
           # qmk writes <kb_with_underscores>_<km>.<ext> into qmk/.build or repo root
           f=$(ls qmk/*.${{ matrix.ext }} qmk/.build/*.${{ matrix.ext }} 2>/dev/null | head -1)
           echo "found: $f"
-          cp "$f" "out/${{ matrix.out }}.${{ matrix.ext }}"
+          # Version in the file name: from the release tag (push or dispatch), else "dev"
+          tag="${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || github.event.inputs.publish }}"
+          ver="${tag#${{ matrix.tagprefix }}}"; [ -z "$tag" ] && ver=dev
+          echo "name=${{ matrix.out }}_v${ver}.${{ matrix.ext }}" >> "$GITHUB_OUTPUT"
+          cp "$f" "out/${{ matrix.out }}_v${ver}.${{ matrix.ext }}"
           ls -la out
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.out }}
-          path: out/${{ matrix.out }}.${{ matrix.ext }}
+          path: out/${{ steps.stage.outputs.name }}
 
       # Publishes when a matching version tag is pushed, OR when run via
       # workflow_dispatch with `publish` set to a matching tag (tag pushes are
@@ -120,5 +138,5 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || github.event.inputs.publish }}
-          files: out/${{ matrix.out }}.${{ matrix.ext }}
+          files: out/${{ steps.stage.outputs.name }}
           generate_release_notes: true

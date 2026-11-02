@@ -1,6 +1,20 @@
 #include "cleaver_rgb.h"
 #include "he_switch_matrix.h"
 
+#ifdef CLEAVER_LED_ORDER_REVERSED
+// LED chain order for the production batch whose calibration lights the
+// wrong keys with the standard table (rows 1-3 run right-to-left, row 3
+// shifted by one). PROVISIONAL: derived from partial press observations;
+// replace with the measured table before release. Built by CI as the
+// *_reversed_leds assets (-e CLEAVER_LED_ORDER_REVERSED=yes).
+static const uint8_t sensor_to_led_map[SENSOR_COUNT] = {
+    0,  1,  2,  3,  4,  5,  6,  7,  8,  9,  10, 11, 12, 13, 14,
+    29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15,              // Row 1 mirrored
+    43, 42, 41, 40, 39, 38, 37, 36, 35, 34, 33, 32, 31, 30,                  // Row 2 mirrored
+    56, 55, 54, 53, 52, 51, 50, 49, 48, 47, 46, 45, 44, 57,                  // Row 3 mirrored, shifted (TODO verify)
+    58, 59, 60, 61, 62, 63, 64, 65, 66, 67                                   // Row 4
+};
+#else
 static const uint8_t sensor_to_led_map[SENSOR_COUNT] = {
     0,  1,  2,  3,  4,  5,  6,  7,  8,  9,  10, 11, 12, 13, 14, 
     15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,
@@ -8,6 +22,7 @@ static const uint8_t sensor_to_led_map[SENSOR_COUNT] = {
     44,45,46,47,48,49,50,51,52,53,54,55,56,57,          // Row 3
     58, 59, 60, 61, 62, 63, 64, 65, 66, 67                                   // Row 4
 };
+#endif
 
 static const HSV warning_color = {28, 255, 255};     // Orange
 static const HSV normal_color = {85, 255, 255};      // Green
