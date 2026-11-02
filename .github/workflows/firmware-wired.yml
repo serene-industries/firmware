@@ -159,3 +159,40 @@ jobs:
           files: out/${{ steps.stage.outputs.name }}
           generate_release_notes: true
           prerelease: ${{ github.event.inputs.prerelease == 'true' }}
+
+  # Mirror published binaries into the repo under releases/<tag>/ so the
+  # configurator's browser flasher can fetch them from
+  # raw.githubusercontent.com (which sends CORS headers; the GitHub release
+  # CDN does not). One commit per release, after every build job finished.
+  commit-binaries:
+    needs: build
+    if: >
+      startsWith(github.ref, 'refs/tags/') ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.publish != '')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 1
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - name: Copy binaries for this tag
+        id: copy
+        run: |
+          tag="${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || github.event.inputs.publish }}"
+          mkdir -p "releases/$tag"
+          # artifacts/<name>/<file>; keep only files that carry this tag's version
+          ver="${tag#*-v}"
+          find artifacts -type f -name "*_v${ver}.*" -exec cp {} "releases/$tag/" \;
+          ls -la "releases/$tag"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+      - name: Commit
+        run: |
+          git config user.name "serene-ci"
+          git config user.email "ci@serene.industries"
+          git add releases
+          git diff --cached --quiet && { echo "nothing to commit"; exit 0; }
+          git commit -m "releases: mirror binaries for ${{ steps.copy.outputs.tag }}"
+          for i in 1 2 3 4 5; do git push origin HEAD:main && break; git pull --rebase origin main; done
