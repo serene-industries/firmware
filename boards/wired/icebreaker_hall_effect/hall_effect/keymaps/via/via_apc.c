@@ -22,7 +22,24 @@
 #include "print.h"
 #include "eeprom.h"
 #include "icebreaker_rgb.h"
+#include "raw_hid.h"
+#include "wait.h"
+#include "bootloader.h"
 #ifdef VIA_ENABLE
+
+// The fork's quantum/via.c dropped the standard id_bootloader_jump (0x0B)
+// handler that stock QMK ships, which the configurator's browser flasher
+// depends on for one-click updates. Restore it at the keyboard level via
+// the via_command_kb() hook (it runs before the core command switch).
+bool via_command_kb(uint8_t *data, uint8_t length) {
+    if (data[0] == id_bootloader_jump) {
+        raw_hid_send(data, length);
+        wait_ms(100);
+        bootloader_jump();
+        return true;
+    }
+    return false;
+}
 
 uint16_t eeprom_save_timer = 0;
 bool eeprom_save_pending = false;
