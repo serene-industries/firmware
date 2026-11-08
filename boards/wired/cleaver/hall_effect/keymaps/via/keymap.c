@@ -246,16 +246,20 @@ void matrix_scan_user(void) {
         uprintf("[DEBUG]: final update slider RGB\n");
         handle_final_led_update();
     }
-
-    /* Caps indicator uses LED 30, same as sensor 30 in calibration — skip override while calibrating */
-    if (!he_config.he_calibration_mode) {
-        if (host_keyboard_led_state().caps_lock) {
-            rgblight_sethsv_at(0, 255, 255, 30); // Hue 0 = red
+    /* Caps indicator on LED 30. Only touch the strip when the state CHANGES:
+     * rgblight_sethsv_at() pushes the entire WS2812 frame (~2 ms of blocking
+     * DMA), and doing it every scan - plus an unconditional rgblight_set() -
+     * throttled the matrix scan and stalled fast key presses. */
+    static bool caps_was_on = false;
+    bool caps_on = host_keyboard_led_state().caps_lock;
+    if (!he_config.he_calibration_mode && caps_on != caps_was_on) {
+        caps_was_on = caps_on;
+        if (caps_on) {
+            rgblight_sethsv_at(0, 255, 255, 30); // red
         } else {
             HSV current_hsv = rgblight_get_hsv();
             rgblight_sethsv_at(current_hsv.h, current_hsv.s, current_hsv.v, 30);
         }
     }
-    rgblight_set();
    }
 
