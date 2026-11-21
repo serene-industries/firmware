@@ -8,7 +8,7 @@ manifest:
     # zmk-studio-messages (lighting/ble/stats protos) via the fork's app/west.yml.
     - name: zmk
       remote: serene-industries
-      revision: icebreaker-studio
+      revision: dynamic-macros
       import: app/west.yml
   self:
     path: config
