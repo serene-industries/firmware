@@ -69,7 +69,7 @@ jobs:
             tagprefix: icebreaker-he-v
             out: icebreaker_hall_effect_via
           - kb: icebreaker/hotswap
-            km: default
+            km: via
             ext: uf2
             tagprefix: icebreaker-hs-v
             out: icebreaker_hotswap
