@@ -28,3 +28,10 @@
   Suspect board files and the configurator before the core.
 - Test builds: publish with `prerelease: true`; the visualizer page offers
   prereleases, the main configurator does not.
+- **Flashing wipes VIA state when the build date changes.** `via.c` derives
+  its EEPROM magic from `QMK_BUILDDATE` (YY-MM-DD). A build from another
+  day fails `via_eeprom_is_valid()`, so boot runs `dynamic_keymap_reset()`
+  and `dynamic_keymap_macro_reset()`: remaps and macros are gone. Same-day
+  builds keep them. This hits customers on every firmware update until the
+  magic is pinned (open decision; see si-configurator ROADMAP).
+
