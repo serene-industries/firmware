@@ -57,6 +57,7 @@ matrix_row_t matrix_get_row(uint8_t row) {
 
 // delete => he_sensor_calibration_t he_sensor_calibration[SENSOR_COUNT];
 static key_debounce_t debounce_matrix[MATRIX_ROWS][MATRIX_COLS] = {{{0, 0}}};
+uint8_t he_live_travel[MATRIX_ROWS][MATRIX_COLS];
 const uint32_t mux_en_pins[] = MUX_EN_PINS;
 const uint32_t mux_sel_pins[] = MUX_SEL_PINS;
 static adc_mux adcMux;
@@ -427,6 +428,7 @@ bool he_update_key_keycancel(matrix_row_t* current_matrix, uint8_t row, uint8_t 
 // Set true while the USB host is suspended (see the suspend hooks below). Used
 // by he_matrix_scan() to wake the host on the first press, bypassing debounce.
 static volatile bool he_suspended = false;
+bool he_is_suspended(void) { return he_suspended; }
 
 bool he_matrix_scan(void) {
     bool updated = false;
@@ -458,6 +460,8 @@ bool he_matrix_scan(void) {
             }
             continue;
         }
+
+        he_live_travel[row][col] = rescale(sensor_value, sensor_id);
 
         if (he_config.he_actuation_mode == 0) {
             if (he_update_key(matrix, row, col, sensor_id, sensor_value)) {

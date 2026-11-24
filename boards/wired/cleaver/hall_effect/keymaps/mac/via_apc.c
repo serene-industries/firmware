@@ -16,6 +16,7 @@
 //Credit to Cipulot's EC boards as a foundation for HE VIA intergration
 //keyboards/cleaver/keymaps/via/via_apc.c
 #include "he_switch_matrix.h"
+#include "he_stream.h"
 #include "action.h"
 #include "via.h"
 #include "config.h"
@@ -47,6 +48,9 @@ enum via_he_enums {
     // 1 reversed/original-batch). The configurator's browser flasher uses
     // it to pick the matching firmware asset.
     id_get_led_variant = 20,
+    // Write-only: 1 starts (and keeps alive) the real-time travel stream for
+    // the configurator visualizer, 0 stops it. See he_stream.c.
+    id_set_live_stream = HE_STREAM_VALUE_ID,
     // clang-format on
 };
 
@@ -76,6 +80,10 @@ void via_he_config_set_value(uint8_t *data) {
     uprintf("Setting config value. ID: %d, Value: %d\n", value_id, value_data);
 
     switch (value_id) {
+        case id_set_live_stream: {
+            he_stream_set(value_data != 0);
+            break;
+        }
         case id_via_he_actuation_threshold: {
             if (value_data >= 10 && value_data <= 90) {
                 for (int i = 0; i < SENSOR_COUNT; i++) {
