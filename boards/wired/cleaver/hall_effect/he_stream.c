@@ -13,11 +13,17 @@
  *   [0] HE_STREAM_REPORT_ID      [1] frame sequence   [2] chunk index
  *   [3..] travel bytes in matrix order (row * MATRIX_COLS + col), 0xFF = no sensor
  */
+#include "he_stream.h"
+
+#ifndef RAW_ENABLE
+void he_stream_set(bool on) { (void)on; }
+void he_stream_task(void) {}
+#else
+
 #include <string.h>
 #include "timer.h"
 #include "raw_hid.h"
 #include "he_switch_matrix.h"
-#include "he_stream.h"
 
 #define HE_STREAM_REPORT_ID 0xF0
 #define HE_STREAM_REPORT_SIZE 32
@@ -68,3 +74,5 @@ void he_stream_task(void) {
     }
     seq++;
 }
+
+#endif // RAW_ENABLE

@@ -6,6 +6,7 @@
 #include "rgblight.h"
 #include "encoder.h"
 #include "gpio.h"
+#include "he_stream.h"
 #include <string.h>
 
 /* matrix state(1:on, 0:off) */
@@ -94,6 +95,11 @@ uint8_t matrix_scan(void) {
     encoder_driver_task(); // Process encoder events
 
     matrix_scan_kb(); //to call matrix_scan_user i suppose
+
+    // Real-time travel stream for the configurator (inert until the host asks).
+    // Lives here because this file is in SRC; the <board>_he.c file is NOT
+    // compiled (QMK only auto-adds <folder>.c), so hooks placed there never run.
+    he_stream_task();
 
     return updated ? 1 : 0;
 }
