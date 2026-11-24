@@ -120,6 +120,11 @@ typedef struct {
 } key_debounce_t;
 
 
+// Live per-key travel (0-100 %) from the last scan, 0xFF where no sensor
+// sits. Written by he_matrix_scan(), read by he_stream.c.
+extern uint8_t he_live_travel[MATRIX_ROWS][MATRIX_COLS];
+bool he_is_suspended(void);
+
 extern he_config_t he_config;
 extern eeprom_he_config_t eeprom_he_config;
 extern via_he_config_t via_he_config;

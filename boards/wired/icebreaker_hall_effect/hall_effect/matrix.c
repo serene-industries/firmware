@@ -6,6 +6,7 @@
 #include "rgblight.h"
 #include "encoder.h"
 #include "gpio.h"
+#include <string.h>
 
 /* matrix state(1:on, 0:off) */
 matrix_row_t raw_matrix[MATRIX_ROWS]; // raw values
@@ -23,6 +24,7 @@ void matrix_print(void) {
 }
 
 void matrix_init(void) {
+    memset(he_live_travel, 0xFF, sizeof(he_live_travel)); // no sensor until the scan fills it
     he_init(he_key_configs, SENSOR_COUNT);
 
     matrix_init_kb(); //dummy call

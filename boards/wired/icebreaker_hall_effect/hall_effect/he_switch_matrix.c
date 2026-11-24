@@ -56,6 +56,8 @@ matrix_row_t matrix_get_row(uint8_t row) {
 
 // delete => he_sensor_calibration_t he_sensor_calibration[SENSOR_COUNT];
 static key_debounce_t debounce_matrix[MATRIX_ROWS][MATRIX_COLS] = {{{0, 0}}};
+uint8_t he_live_travel[MATRIX_ROWS][MATRIX_COLS];
+bool he_is_suspended(void) { return false; }
 const uint32_t mux_en_pins[] = MUX_EN_PINS;
 const uint32_t mux_sel_pins[] = MUX_SEL_PINS;
 static adc_mux adcMux;
@@ -461,6 +463,8 @@ bool he_matrix_scan(void) {
             }
             continue; // Skip normal processing for this sensor
         }
+
+        he_live_travel[row][col] = rescale(sensor_value, sensor_id);
 
         if (he_config.he_actuation_mode == 0) {
             if (he_update_key(matrix, row, col, sensor_id, sensor_value)) {

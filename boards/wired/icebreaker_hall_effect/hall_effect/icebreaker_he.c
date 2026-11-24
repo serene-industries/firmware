@@ -1,6 +1,12 @@
 
 #include "he_switch_matrix.h"
 #include "print.h" //debug
+#include "he_stream.h"
+
+// Real-time travel stream for the configurator (inert until the host asks).
+void housekeeping_task_kb(void) {
+    he_stream_task();
+}
 
 #ifdef VIA_ENABLE
 

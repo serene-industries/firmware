@@ -16,6 +16,7 @@
 //Credit to Cipulot's EC boards as a foundation for HE VIA intergration
 //keyboards/icebreaker/keymaps/via/via_apc.c
 #include "he_switch_matrix.h"
+#include "he_stream.h"
 #include "action.h"
 #include "via.h"
 #include "config.h"
@@ -60,6 +61,8 @@ enum via_he_enums {
     id_set_rapid_trigger_deadzone = 7,
     id_set_rapid_trigger_engage_distance = 8,
     id_set_rapid_trigger_disengage_distance = 9,
+    // Write-only: 1 starts (and keeps alive) the travel stream, 0 stops it.
+    id_set_live_stream = HE_STREAM_VALUE_ID,
     // clang-format on
 };
 
@@ -89,6 +92,10 @@ void via_he_config_set_value(uint8_t *data) {
     uprintf("Setting config value. ID: %d, Value: %d\n", value_id, value_data);
 
     switch (value_id) {
+        case id_set_live_stream: {
+            he_stream_set(value_data != 0);
+            break;
+        }
         case id_via_he_actuation_threshold: {
             if (value_data >= 10 && value_data <= 90) {
                 for (int i = 0; i < SENSOR_COUNT; i++) {
