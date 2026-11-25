@@ -205,6 +205,27 @@ def run_board(board, title):
         check('a deadzone of 5 is stored as 15 (all keys and one key)', o.replies[3][3:5] == [0, 15] and o.replies[4][8] == 15, str(o.replies[4][:11]))
         check('rapid trigger at rest level %d: every key comes back up' % rest, any(o.matrices[0]) and o.matrices[1] == [0] * L['rows'], str(o.matrices[1]))
 
+    # ---- 6b. a level change is felt by a held key: no save, no power cycle, no wait for the one-key command
+    fresh(ee)
+    o = boot(binary, ee, ['A %d 40' % sW, 'X 40 20', 'M',                    # W held at 40 % of its travel: under the default 50, so up
+                          kset(*W, 30, 20), 'X 40 20', 'M',                  # one key's levels 30 / 20: down within 20 ms
+                          kset(*W, 80, 60), 'X 40 20', 'M',                  # 80 / 60: up again
+                          S(SET, 0, 2, 20), S(SET, 0, 1, 30), 'X 40 20', 'M',  # the all-keys commands (release first when going down): not yet
+                          'T 1500', 'X 40 20', 'M', 'T 1000', 'X 40 20', 'M',  # not at 1.5 s; there by 2.5 s
+                          S(SET, 0, 1, 80), S(SET, 0, 2, 60), 'T 2500', 'X 40 20', 'M'])
+    m = [bit(x, W) for x in o.matrices]
+    check('a key held at 40 %: up at the default 50', m[0] == 0, str(m))
+    check('one key set to 30 / 20: the held key goes down at once', m[1] == 1, str(m))
+    check('one key set to 80 / 60: the held key comes up at once', m[2] == 0, str(m))
+    check('all keys set to 30 / 20: nothing yet, nothing at 1.5 s', m[3] == 0 and m[4] == 0, str(m))
+    check('...the held key is down once the 2 s have passed', m[5] == 1, str(m))
+    check('all keys set to 80 / 60: the held key comes up after 2 s', m[6] == 0, str(m))
+    check('no other key moved through any of it', all(not any((x[r] >> c) & 1 for (r, c) in sensor if (r, c) != W) for x in o.matrices))
+    # going down with actuate first is not the same: actuate may not pass a key's release, so it stops one above it
+    fresh(ee)
+    o = boot(binary, ee, [kset(*W, 80, 60), S(SET, 0, 1, 30), 'T 2500', 'D'])
+    check('all-keys actuate 30 on a key whose release is 60 lands at 61; a key at 50 / 30 lands at 31', o.keys[sW]['act'] == 61 and o.keys[sA]['act'] == 31, '%s %s' % (o.keys[sW]['act'], o.keys[sA]['act']))
+
     # ---- 7. the all-keys commands still work, and land 2 s later
     fresh(ee)
     o = boot(binary, ee, [kset(*W, 22, 12), S(SET, 0, 1, 60), S(GET, 0, 1), kget(*W), 'T 2500', S(GET, 0, 1), 'D',
