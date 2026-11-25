@@ -35,3 +35,24 @@
   builds keep them. This hits customers on every firmware update until the
   magic is pinned (open decision; see si-configurator ROADMAP).
 
+
+## Per-key HE settings (branch work, 2026-11-25, not released)
+
+- `he_perkey.c` / `he_perkey.h` in each HE board folder (identical files, listed
+  in `SRC`): VIA custom value ids 22 info, 23 one key's levels by matrix row and
+  column, 24 the key-cancel pair, 25 the MCU's unique ID. The header documents
+  the bytes. Every VIA keymap's `via_apc.c` forwards those ids to it.
+- The keyboard-level EEPROM block grew from 3 bytes to `7 + 3 * SENSOR_COUNT`:
+  mode, a two-byte layout mark, the key-cancel pair, and deadzone / down / up
+  per key. A block without the mark is treated as a fresh board. Macro space
+  shrinks by the same amount (about 210 bytes).
+- Behaviour that changed with it: the mode and the rapid-trigger numbers now
+  survive a power cycle (before, only the mode keys stored the mode and nothing
+  read it back; rapid-trigger numbers reset on every boot); the Cleaver's
+  key-cancel pair defaults to A and D (it was sensors 32 and 34, which are S
+  and F on the Cleaver's map).
+- The all-keys actuate and release setters are applied by the keymap's
+  housekeeping about 2 s after the last change; the per-key command applies at
+  once. The deadzone getter answers in two bytes, high first.
+- The configurator's client functions and an emulated board written from this
+  source live in `si-configurator` (`lib/viaProtocol.ts`, `tests/he/`).
