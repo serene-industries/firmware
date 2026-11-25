@@ -170,10 +170,10 @@ void noise_ceiling_calibration(void) {
             he_key_configs[i].noise_ceiling = average_value;
             eeprom_he_key_configs[i].noise_ceiling = average_value;
 
-            update_calibration_rgb(i, average_value);
-            led_trigger = true;
             printf("Updated ceiling for sensor %d to %u\n", i, average_value);
         }
+        // a key's light turns green when its press has bottomed out, wherever that is for this switch (he_perkey.c)
+        if (he_cal_note(i, average_value)) led_trigger = true;
     }
 
     if (led_trigger) {

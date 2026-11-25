@@ -84,6 +84,17 @@
   570 on the Icebreaker and 490 on the Cleaver, which made the key read
   100 % almost at once); the stream keeps showing travel while calibrating,
   against the level stored before.
+- **A key is done when its press bottoms out** (`he_cal_note`, owner
+  2026-11-25: a switch cannot be pushed further than it goes, so no fixed
+  level may decide). Done = the reading sat still at its deepest point for
+  100 ms, at least a quarter of the expected travel from rest, and not under
+  half the middle travel of the keys done so far (a light press held still
+  goes back to "not pressed yet"). A tap never counts; a deeper press later
+  replaces a shallower level. The key's light is red until done, then green:
+  the old yellow state, set by fixed levels (`CEILING_MEDIUM`,
+  `CEILING_GOOD`), left keys yellow that had bottomed out. On save only done
+  keys get a new level. Unproven on a board: the 100 ms and the tolerance
+  (travel / 16 + 2 counts) are chosen from the source, not measured.
 - `tests/host/` runs the boards' real source on a computer (`python3
   tests/host/run.py`, also a workflow on every push that touches the HE
   boards): VIA packets in, replies out, keys held through a stand-in ADC, the

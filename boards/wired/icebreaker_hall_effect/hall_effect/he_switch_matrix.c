@@ -169,10 +169,10 @@ void noise_ceiling_calibration(void) {
         // Update ceiling if the average reading is above the ceiling range
         if (average_value > ceiling_range) {
             he_key_configs[i].noise_ceiling = average_value;
-            update_calibration_rgb(i, average_value);
-            led_trigger  = true;
             printf("Updated ceiling for sensor %d to %d\n", i, average_value);
         }
+        // a key's light turns green when its press has bottomed out, wherever that is for this switch (he_perkey.c)
+        if (he_cal_note(i, average_value)) led_trigger = true;
     }
 
     if (led_trigger) {

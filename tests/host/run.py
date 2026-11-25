@@ -93,6 +93,7 @@ def run_board(board, title):
         check('kb block size is 5 + 2 per pair + 3 per sensor', L['kbsize'] == 5 + 2 * 8 + 3 * L['sensors'])
     sensor = {(k['row'], k['col']): s for s, k in o.keys.items()}
     sW, sA, sS, sD, sF, sG = (sensor[x] for x in (W, A, Sk, D, F, G))
+    sQ, sE = sensor[(1, 1)], sensor[(1, 3)]
     def bit(m, pos): return (m[pos[0]] >> pos[1]) & 1
     empty = next((r, c) for r in range(L['rows'] - 1, -1, -1) for c in range(L['cols'] - 1, -1, -1) if (r, c) not in sensor)
 
@@ -234,50 +235,72 @@ def run_board(board, title):
     o = boot(binary, ee, ['D'])
     check('carried: a key with nonsense levels gets defaults, its calibration stays', (o.keys[7]['act'], o.keys[7]['rel'], o.keys[7]['ceil']) == (50, 30, ceil[7]) and o.keys[8]['act'] == 44, str(o.keys[7]))
 
-    # ---- 9. a full press on default calibration reads under 100 when the switch bottoms out short of the default
-    if not falling:
-        fresh(ee)
-        o = boot(binary, ee, ['RAW %d 660' % sF, 'N 2', 'V %d' % sF, S(SET, 0, 4), 'RAW %d 660' % sF, 'N 6', S(SET, 0, 5), 'N 2', 'V %d' % sF, 'D'])
-        o2 = boot(binary, ee, ['RAW %d 660' % sF, 'N 2', 'V %d' % sF, 'D'])
-        check('after calibration the same press reads 100 %', o2.travel[sF] == 100, str(o2.travel))
-        check('calibration kept over a power cycle', o2.keys[sF]['ceil'] == o.keys[sF]['ceil'], '%s %s' % (o2.keys[sF]['ceil'], o.keys[sF]['ceil']))
-        fresh(ee)
-        o3 = boot(binary, ee, ['RAW %d 660' % sF, 'N 2', 'V %d' % sF])
-        check('before calibration that press reads 75 %', o3.travel[sF] == 75, str(o3.travel))
-
-    # ---- 9b. calibration as the configurator can see it: which keys moved, one key back, leave, keys not pressed keep theirs
+    # ---- 9. calibration. A key is done when its press bottoms out: still at its deepest point for a tenth of a
+    #         second, far enough from rest, and not far shallower than the other keys. Only done keys are saved.
     def cstate(): return S(GET, 0, 26, 0)
     def ckey(pos): return S(GET, 0, 26, 1, *pos)
-    def moved_keys(r): return sorted((row, c) for row in range(L['rows']) for c in range(16) if ((r[5 + 2 * row] | (r[6 + 2 * row] << 8)) >> c) & 1)
+    def bits(r, base): return sorted((row, c) for row in range(L['rows']) for c in range(16) if ((r[base + 2 * row] | (r[base + 1 + 2 * row] << 8)) >> c) & 1)
+    def moved_keys(r): return bits(r, 5)
+    def done_keys(r): return bits(r, 5 + 2 * L['rows'])
     def u16(r, i): return (r[i] << 8) | r[i + 1]
-    bF = L['floor'] + (150 if not falling else -300); bG = L['floor'] + (130 if not falling else -260)
+    sgn = -1 if falling else 1
+    span = abs(L['ceiling'] - L['floor'])
+    def at(frac): return L['floor'] + sgn * int(span * frac)        # a raw level that far into the expected travel
+    def hold(sensor, raw, ms=130): return ['RAW %d %d' % (sensor, raw), 'N 2', 'T %d' % ms, 'N 2']   # press and stay
+    def tap(sensor, raw): return ['RAW %d %d' % (sensor, raw), 'N 2', 'RAW %d %d' % (sensor, L['floor']), 'N 2', 'T 130', 'N 2']   # down and straight back up
+    def let_go(sensor): return ['RAW %d %d' % (sensor, L['floor']), 'N 2']
+    bF, bG = at(0.9), at(0.8)
+    if not falling:
+        fresh(ee)
+        o3 = boot(binary, ee, ['RAW %d 660' % sF, 'N 2', 'V %d' % sF])
+        check('default calibration: a press that bottoms at 660 reads 75 %', o3.travel[sF] == 75, str(o3.travel))
     ceil = old_image(ee, L, falling=falling)       # a board that has a calibration already
-    o = boot(binary, ee, [cstate(), ckey(F), S(SET, 0, 4), cstate(), 'RAW %d %d' % (sF, bF), 'N 6', 'V %d' % sF, cstate(), ckey(F), ckey(A),
-                          'RAW %d %d' % (sG, bG), 'N 6', cstate(), S(SET, 0, 26, 1, *G), cstate(), ckey(G),
-                          'RAW %d %d' % (sF, L['floor']), 'RAW %d %d' % (sG, L['floor']), 'N 6', cstate(), S(SET, 0, 5), cstate(), 'D'])
+    o = boot(binary, ee, [cstate(), ckey(F), S(SET, 0, 4), cstate(), 'RAW %d %d' % (sF, bF), 'N 2', 'V %d' % sF, cstate(), ckey(F), 'T 130', 'N 2', cstate(), ckey(F), ckey(A),
+                          *hold(sG, bG), cstate(), S(SET, 0, 26, 1, *G), cstate(), ckey(G), *let_go(sF), *let_go(sG), cstate(), S(SET, 0, 5), cstate(), 'D'])
     r = o.replies
-    check('calibration: off at first, nothing moved', r[0][4] == 0 and moved_keys(r[0]) == [], str(r[0][:16]))
+    check('calibration: off at first, nothing moved', r[0][4] == 0 and moved_keys(r[0]) == [] and done_keys(r[0]) == [], str(r[0][:26]))
     check('calibration: a key reports rest, bottom and stored bottom', r[1][6] == 1 and u16(r[1], 7) == L['floor'] and u16(r[1], 9) == ceil[sF] and u16(r[1], 11) == ceil[sF] and r[1][13] == 0, str(r[1][:14]))
     check('calibration: started, still nothing moved', r[3][4] == 1 and moved_keys(r[3]) == [], str(r[3][:16]))
     want_t = abs(bF - L['floor']) * 100 // abs(ceil[sF] - L['floor'])
     check('calibration: travel is shown against the stored level meanwhile', o.travel[sF] == min(100, want_t), '%s want %s' % (o.travel, want_t))
-    check('calibration: F pressed, F moved', moved_keys(r[4]) == [F], str(moved_keys(r[4])))
-    check('calibration: F has its new bottom, the stored one is still known', u16(r[5], 9) == bF and u16(r[5], 11) == ceil[sF] and r[5][13] == 1, str(r[5][:14]))
-    check('calibration: a key not pressed says so', r[6][13] == 0 and u16(r[6], 11) == ceil[sA], str(r[6][:14]))
-    check('calibration: two keys moved', moved_keys(r[7]) == sorted([F, G]), str(moved_keys(r[7])))
-    check('calibration: one key put back', moved_keys(r[9]) == [F] and r[10][13] == 0 and u16(r[10], 11) == ceil[sG], str(r[10][:14]))
-    check('calibration: letting go does not move the bottom', moved_keys(r[11]) == [F])
-    check('calibration: saved, mode off', r[13][4] == 0 and o.cal == 0)
-    check('calibration: the pressed key has its new bottom', o.keys[sF]['ceil'] == bF, str(o.keys[sF]))
-    check('calibration: keys not pressed keep the bottom they had', all(o.keys[i]['ceil'] == ceil[i] for i in range(L['sensors']) if i != sF), str(o.keys[sG]))
+    check('calibration: F just arrived at the bottom: moved, not done yet', moved_keys(r[4]) == [F] and done_keys(r[4]) == [] and r[5][13] == 1, str(r[5][:14]))
+    check('calibration: F still there a tenth of a second later: done', done_keys(r[6]) == [F] and r[7][13] == 3 and u16(r[7], 9) == bF and u16(r[7], 11) == ceil[sF], str(r[7][:14]))
+    check('calibration: a key not pressed says so', r[8][13] == 0 and u16(r[8], 11) == ceil[sA], str(r[8][:14]))
+    check('calibration: two keys done', done_keys(r[9]) == sorted([F, G]), str(done_keys(r[9])))
+    check('calibration: one key put back', moved_keys(r[11]) == [F] and done_keys(r[11]) == [F] and r[12][13] == 0 and u16(r[12], 11) == ceil[sG], str(r[12][:14]))
+    check('calibration: letting go changes nothing', done_keys(r[13]) == [F])
+    check('calibration: saved, mode off', r[15][4] == 0 and o.cal == 0)
+    check('calibration: the done key has its new bottom', o.keys[sF]['ceil'] == bF, str(o.keys[sF]))
+    check('calibration: every other key keeps the bottom it had', all(o.keys[i]['ceil'] == ceil[i] for i in range(L['sensors']) if i != sF), str(o.keys[sG]))
     o = boot(binary, ee, ['D', 'RAW %d %d' % (sF, bF), 'N 2', 'V %d' % sF])
     check('calibration: kept over a power cycle, and the same press now reads 100', o.keys[sF]['ceil'] == bF and o.keys[sG]['ceil'] == ceil[sG] and o.travel[sF] == 100, '%s %s' % (o.keys[sF], o.travel))
-    o = boot(binary, ee, [S(SET, 0, 4), 'RAW %d %d' % (sG, bG), 'N 6', cstate(), S(SET, 0, 26, 0), cstate(), 'D', S(SET, 0, 26, 0), S(SET, 0, 5), 'D'])
-    check('calibration: left without saving, nothing kept', moved_keys(o.replies[1]) == [G] and o.replies[3][4] == 0 and o.cal == 0 and o.keys[sG]['ceil'] == ceil[sG] and o.keys[sF]['ceil'] == bF, str(o.keys[sG]))
+    # what must not count as the bottom
+    o = boot(binary, ee, [S(SET, 0, 4), *tap(sG, bG), cstate(), ckey(G),
+                          'RAW %d %d' % (sA, at(0.3)), 'N 2', 'T 60', 'RAW %d %d' % (sA, at(0.5)), 'N 2', 'T 60', 'RAW %d %d' % (sA, at(0.7)), 'N 2', 'T 60', 'N 2', cstate(),
+                          *let_go(sA), *hold(sD, at(0.15)), cstate(), S(SET, 0, 5), 'D'])
+    r = o.replies
+    check('calibration: a tap is not the bottom, however deep', done_keys(r[1]) == [] and moved_keys(r[1]) == [G] and r[2][13] == 1, str(r[2][:14]))
+    check('calibration: a key still creeping down is not done', A not in done_keys(r[3]), str(done_keys(r[3])))
+    check('calibration: a brush held still is not a press', D not in done_keys(r[4]), str(done_keys(r[4])))
+    check('calibration: none of those is stored', all(o.keys[i]['ceil'] == (bF if i == sF else ceil[i]) for i in range(L['sensors'])), str([o.keys[x]['ceil'] for x in (sG, sA, sD)]))
+    # a light press held still passes for a bottom only until the board has seen what a bottom is
+    light, full = at(0.35), at(0.9)
+    o = boot(binary, ee, [S(SET, 0, 4), *hold(sG, light), cstate(), *let_go(sG), *hold(sQ, full), *let_go(sQ), cstate(), *hold(sE, full), *let_go(sE), cstate(), ckey(G),
+                          *hold(sA, light), cstate(), *let_go(sA), *hold(sA, at(0.6)), *let_go(sA), *hold(sA, full), cstate(), ckey(A), S(SET, 0, 5), 'D'])
+    r = o.replies
+    check('calibration: a light press held still is taken at first', done_keys(r[1]) == [G], str(done_keys(r[1])))
+    check('calibration: once other keys have bottomed out it goes back to not pressed', G not in done_keys(r[3]) and G not in moved_keys(r[3]) and r[4][13] == 0 and done_keys(r[3]) == sorted([(1, 1), (1, 3)]), '%s %s' % (done_keys(r[2]), done_keys(r[3])))
+    check('calibration: after that a light press held still is not taken at all', A not in done_keys(r[5]), str(done_keys(r[5])))
+    check('calibration: a deeper press replaces a shallower one', A in done_keys(r[6]) and u16(r[7], 9) == full, str(r[7][:14]))
+    check('calibration: saved levels are the bottoms, the light key kept its own', o.keys[sQ]['ceil'] == full and o.keys[sE]['ceil'] == full and o.keys[sA]['ceil'] == full and o.keys[sG]['ceil'] == ceil[sG], str([o.keys[x]['ceil'] for x in (sQ, sE, sA, sG)]))
+    # leaving, and saving with nothing pressed
+    before = {i: o.keys[i]['ceil'] for i in range(L['sensors'])}
+    o = boot(binary, ee, [S(SET, 0, 4), *hold(sG, bG), cstate(), S(SET, 0, 26, 0), cstate(), 'D', S(SET, 0, 26, 0), S(SET, 0, 5), 'D'])
+    check('calibration: left without saving, nothing kept', done_keys(o.replies[1]) == [G] and o.replies[3][4] == 0 and o.cal == 0 and all(o.keys[i]['ceil'] == before[i] for i in before), str(o.keys[sG]))
     o = boot(binary, ee, ['D'])
-    check('calibration: and nothing stored by leaving', o.keys[sG]['ceil'] == ceil[sG] and o.keys[sF]['ceil'] == bF)
-    o = boot(binary, ee, [S(SET, 0, 4), 'N 6', S(SET, 0, 5), 'D'])
-    check('calibration: started and saved with no key pressed changes nothing', all(o.keys[i]['ceil'] == (bF if i == sF else ceil[i]) for i in range(L['sensors'])), str(o.keys[0]))
+    check('calibration: and nothing stored by leaving', all(o.keys[i]['ceil'] == before[i] for i in before))
+    o = boot(binary, ee, [S(SET, 0, 4), 'N 6', 'T 200', 'N 6', S(SET, 0, 5), 'D'])
+    check('calibration: started and saved with no key pressed changes nothing', all(o.keys[i]['ceil'] == before[i] for i in before), str(o.keys[0]))
 
     # ---- 10. the configurator's emulated board answers every packet as the firmware does
     for seed in (range(int(os.environ.get('SEEDS', '3'))) if emu else []):

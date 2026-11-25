@@ -13,7 +13,10 @@
 #endif
 
 extern const sensor_to_matrix_map_t sensor_to_matrix_map[];
-extern void end_calibration_visual(void);   // the board's lights (<board>_rgb.c)
+// the board's lights (<board>_rgb.c): a key is red until it is done, then green
+extern void end_calibration_visual(void);
+extern void update_calibration_rgb(uint8_t sensor_id, uint16_t done);
+extern void apply_calibration_changes_rgb(void);
 
 he_cancel_pair_t he_pairs[HE_CANCEL_PAIRS];
 uint8_t          he_pair_of[SENSOR_COUNT];
@@ -52,11 +55,85 @@ __attribute__((unused)) static void pairs_default(void) {
 // ---- calibration: what the board had before, so a key can go back to it
 static uint16_t cal_old[SENSOR_COUNT];
 static bool     cal_have_old = false;
+static bool     cal_done[SENSOR_COUNT];     // the key has bottomed out in this calibration
+static bool     cal_still[SENSOR_COUNT];    // the key is sitting still at its deepest point...
+static uint16_t cal_anchor[SENSOR_COUNT];   // ...at this reading...
+static uint16_t cal_since[SENSOR_COUNT];    // ...since this time
 
 void he_cal_begin(void) {
     if (he_config.he_calibration_mode) return;   // started twice: the first start holds the levels to go back to
     for (int i = 0; i < SENSOR_COUNT; i++) cal_old[i] = he_key_configs[i].noise_ceiling;
+    memset(cal_still, 0, sizeof(cal_still));
+    memset(cal_done, 0, sizeof(cal_done));
     cal_have_old = true;
+}
+
+static uint16_t apart(uint16_t a, uint16_t b) {
+    return a > b ? a - b : b - a;
+}
+
+static uint16_t cal_depth(uint8_t s) {
+    return apart(he_key_configs[s].noise_ceiling, he_key_configs[s].noise_floor);
+}
+
+// One key back to "not pressed yet": its light red, its bottom level at the start value.
+static void cal_undo(uint8_t s) {
+    he_key_configs[s].noise_ceiling        = HE_CAL_START_CEILING;
+    eeprom_he_key_configs[s].noise_ceiling = cal_old[s];
+    cal_still[s]                           = false;
+    cal_done[s]                            = false;
+    update_calibration_rgb(s, 0);
+}
+
+// The middle travel of the keys that are done. Called when a key completes, not in every scan.
+static uint16_t cal_middle(void) {
+    uint16_t v[SENSOR_COUNT];
+    uint8_t  n = 0;
+    for (uint8_t s = 0; s < SENSOR_COUNT; s++) {
+        if (!cal_done[s]) continue;
+        uint16_t x = cal_depth(s);
+        uint8_t  k = n++;
+        while (k > 0 && v[k - 1] > x) {
+            v[k] = v[k - 1];
+            k--;
+        }
+        v[k] = x;
+    }
+    return n ? v[n / 2] : 0;
+}
+
+// A switch has bottomed out when its reading stops at its deepest point: no fixed level says where
+// that is, so the key is done wherever it stops, provided it is a press and not a tap (the header
+// lists the three conditions). Returns true when a key's light changed.
+bool he_cal_note(uint8_t s, uint16_t raw) {
+    if (!he_config.he_calibration_mode || !cal_have_old || cal_done[s]) return false;
+    uint16_t ce = he_key_configs[s].noise_ceiling, depth = cal_depth(s), tol = depth / 16 + 2;
+    if (ce == HE_CAL_START_CEILING || depth < HE_CAL_MIN_TRAVEL || apart(raw, ce) > tol) {
+        cal_still[s] = false;   // not pressed, a brush, or no longer at its deepest point
+        return false;
+    }
+    if (!cal_still[s] || apart(raw, cal_anchor[s]) > tol) {   // arrived, or still creeping: the wait starts here
+        cal_still[s]  = true;
+        cal_anchor[s] = raw;
+        cal_since[s]  = timer_read();
+        return false;
+    }
+    if (timer_elapsed(cal_since[s]) < HE_CAL_STILL_MS) return false;
+    // A key far shallower than the ones already done is being held lightly, not bottomed out: it
+    // does not count, and its light stays as it is.
+    if ((uint32_t)depth * 2 < cal_middle()) {
+        cal_still[s] = false;
+        return false;
+    }
+    cal_done[s] = true;
+    update_calibration_rgb(s, 1);
+    // And the other way round: a key taken earlier, before the board had seen a real bottom, that
+    // now turns out far shallower than the rest goes back to "not pressed yet".
+    uint16_t middle = cal_middle();
+    for (uint8_t i = 0; i < SENSOR_COUNT; i++) {
+        if (cal_done[i] && (uint32_t)cal_depth(i) * 2 < middle) cal_undo(i);
+    }
+    return true;
 }
 
 // The start command sets every bottom level to HE_CAL_START_CEILING; a key whose level is still
@@ -68,7 +145,7 @@ static bool cal_moved(uint8_t s) {
 void he_cal_keep_untouched(void) {
     if (!cal_have_old) return;
     for (int i = 0; i < SENSOR_COUNT; i++) {
-        if (he_key_configs[i].noise_ceiling == HE_CAL_START_CEILING) he_key_configs[i].noise_ceiling = cal_old[i];
+        if (!cal_done[i]) he_key_configs[i].noise_ceiling = cal_old[i];   // not pressed, or only brushed
     }
     cal_have_old = false;
 }
@@ -251,11 +328,12 @@ void he_perkey_get(uint8_t *d) {
         case HE_VAL_CAL:
             if (d[1] == 0) {
                 d[2] = he_config.he_calibration_mode ? 1 : 0;
-                memset(&d[3], 0, 2 * MATRIX_ROWS);
+                memset(&d[3], 0, 4 * MATRIX_ROWS);
                 for (uint8_t s = 0; s < SENSOR_COUNT; s++) {
                     if (!cal_moved(s)) continue;
                     uint8_t r = sensor_to_matrix_map[s].row, c = sensor_to_matrix_map[s].col;
                     d[3 + 2 * r + (c >> 3)] |= (uint8_t)(1u << (c & 7));
+                    if (cal_done[s]) d[3 + 2 * MATRIX_ROWS + 2 * r + (c >> 3)] |= (uint8_t)(1u << (c & 7));
                 }
             } else if (d[1] == 1) {
                 uint8_t s = he_sensor_at(d[2], d[3]);
@@ -267,7 +345,7 @@ void he_perkey_get(uint8_t *d) {
                 put_u16(&d[5], he_key_configs[s].noise_floor);
                 put_u16(&d[7], he_key_configs[s].noise_ceiling);
                 put_u16(&d[9], (he_config.he_calibration_mode && cal_have_old) ? cal_old[s] : he_key_configs[s].noise_ceiling);
-                d[11] = cal_moved(s) ? 1 : 0;
+                d[11] = (cal_moved(s) ? 1 : 0) | (cal_moved(s) && cal_done[s] ? 2 : 0);
             }
             break;
     }
@@ -324,8 +402,8 @@ void he_perkey_set(uint8_t *d) {
             } else if (d[1] == 1) {   // one key back to where it has not been pressed
                 uint8_t s = he_sensor_at(d[2], d[3]);
                 if (s == HE_NO_SENSOR) return;
-                he_key_configs[s].noise_ceiling        = HE_CAL_START_CEILING;
-                eeprom_he_key_configs[s].noise_ceiling = cal_old[s];
+                cal_undo(s);
+                apply_calibration_changes_rgb();
             }
             break;
         }

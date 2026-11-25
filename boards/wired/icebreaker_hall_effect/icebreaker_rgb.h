@@ -59,7 +59,7 @@ typedef struct {
 } calibration_led_t;
 
 void start_calibration_rgb(void);
-void update_calibration_rgb(uint8_t sensor_id, uint16_t ceiling);
+void update_calibration_rgb(uint8_t sensor_id, uint16_t done);   // 0 = not yet (red), anything else = bottomed out (green)
 void apply_calibration_changes_rgb(void);
 void end_calibration_visual(void);
 

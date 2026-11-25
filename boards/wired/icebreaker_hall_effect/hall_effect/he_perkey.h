@@ -16,16 +16,20 @@
 //                      set d[1] pair index, d[2] row A, d[3] col A, d[4] row B, d[5] col B
 //                              (two different keys, neither in another pair; four 0xFF empty the slot)
 //   HE_VAL_UID (25)  get   -> d[1..12] the MCU's unique ID (zeros if unavailable)
-//   HE_VAL_CAL (26)  get   d[1] 0 -> d[2] 1 while calibrating, then two bytes per matrix row from
-//                              d[3]: one bit per column (low byte = columns 0 to 7) for every key
-//                              whose bottom has moved in this calibration
+//   HE_VAL_CAL (26)  get   d[1] 0 -> d[2] 1 while calibrating, then two bitmaps of two bytes per
+//                              matrix row, one bit per column (low byte = columns 0 to 7): from d[3]
+//                              the keys whose bottom has moved in this calibration, after it the
+//                              keys that are done (pressed until they stopped: the key's light is green)
 //                    get   d[1] 1, d[2] row, d[3] col -> d[4] 1 if a sensor sits there,
 //                              d[5..6] rest level, d[7..8] bottom level now, d[9..10] bottom level
-//                              stored before this calibration (raw ADC, high byte first), d[11] moved
+//                              stored before this calibration (raw ADC, high byte first),
+//                              d[11] bit 0 moved, bit 1 done
 //                    set   d[1] 0                  leave calibration, nothing kept
-//                    set   d[1] 1, d[2] row, d[3] col   that key back to its stored bottom level
-//   Calibration starts and is saved with the older ids 4 and 5. On save, a key that was not
-//   pressed keeps the bottom level it had.
+//                    set   d[1] 1, d[2] row, d[3] col   that key back to "not pressed yet"
+//   Calibration starts and is saved with the older ids 4 and 5. A key is done when its press has
+//   bottomed out, wherever that is for this switch: see he_cal_note() in he_perkey.c for what
+//   counts and how a light tap is kept out. On save only the keys that are done get a new bottom
+//   level; every other key keeps the one it had.
 //
 // Keys are named by matrix row and column, the same as the keymap commands.
 #pragma once
@@ -85,7 +89,17 @@ void    he_perkey_set(uint8_t *d);
 void    he_perkey_mark_dirty(void);  // mode, rapid-trigger numbers or a pair changed: save soon
 void    he_perkey_task(void);        // call from the scan loop
 
+// What makes a key done in a calibration (he_cal_note):
+//   it has sat still at its deepest point for HE_CAL_STILL_MS (a tap turns round at once, a key on
+//   its stop does not), at least HE_CAL_MIN_TRAVEL raw ADC from the rest level (a quarter of the
+//   travel the board expects), and its travel is at least half the middle travel of the keys done
+//   so far (a key held lightly part of the way stands out against the others and goes back to
+//   "not pressed yet"). A later, deeper press always replaces a shallower level.
+#define HE_CAL_STILL_MS 100
+#define HE_CAL_MIN_TRAVEL ((EXPECTED_NOISE_CEILING > EXPECTED_NOISE_FLOOR ? EXPECTED_NOISE_CEILING - EXPECTED_NOISE_FLOOR : EXPECTED_NOISE_FLOOR - EXPECTED_NOISE_CEILING) / 4)
+
 // Calibration, as the keymap's start and save commands and the calibration scan use it.
 void    he_cal_begin(void);             // call before calibration mode is switched on: remembers the bottom levels
-void    he_cal_keep_untouched(void);    // call first when saving: keys that were not pressed keep theirs
+void    he_cal_keep_untouched(void);    // call first when saving: only keys that are done get a new level
 uint8_t he_cal_travel(uint8_t sensor, uint16_t raw);   // travel against the level stored before this calibration
+bool    he_cal_note(uint8_t sensor, uint16_t raw);     // call for every key in every calibration scan; true when a key's light changed
