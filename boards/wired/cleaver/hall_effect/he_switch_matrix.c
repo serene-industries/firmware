@@ -718,5 +718,12 @@ void he_matrix_print_rapid_trigger_debug(void) {
 }
 
 
+#else
+// No console in this build (the MIDI interface has its endpoint): the debug printers are still called by
+// matrix.c for the DEBUG keys, and do nothing.
+void he_matrix_print(void) {}
+void he_matrix_print_extended(void) {}
+void he_matrix_print_rapid_trigger(void) {}
+void he_matrix_print_rapid_trigger_debug(void) {}
 #endif
 
