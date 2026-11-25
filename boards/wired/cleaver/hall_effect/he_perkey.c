@@ -71,8 +71,9 @@ void he_perkey_load(void) {
         he_key_rapid_trigger_configs[i].boundary_value     = he_key_rapid_trigger_configs[i].deadzone;
     }
     uint8_t a = eeprom_he_config.cancel_pair[0], b = eeprom_he_config.cancel_pair[1];
-    he_cancel_a = a < SENSOR_COUNT ? a : HE_NO_SENSOR;
-    he_cancel_b = (b < SENSOR_COUNT && b != a) ? b : HE_NO_SENSOR;
+    bool pair_ok = a < SENSOR_COUNT && b < SENSOR_COUNT && a != b;   // a pair is two different keys, or none
+    he_cancel_a  = pair_ok ? a : HE_NO_SENSOR;
+    he_cancel_b  = pair_ok ? b : HE_NO_SENSOR;
     if (eeprom_he_config.he_actuation_mode <= ACTUATION_MODE_KEY_CANCEL) he_config.he_actuation_mode = eeprom_he_config.he_actuation_mode;
     cancel_reset_state();
 }
@@ -180,7 +181,8 @@ void he_perkey_set(uint8_t *d) {
             if (d[1] != 0) return;
             uint8_t a = (d[2] == 0xFF) ? HE_NO_SENSOR : he_sensor_at(d[2], d[3]);
             uint8_t b = (d[4] == 0xFF) ? HE_NO_SENSOR : he_sensor_at(d[4], d[5]);
-            if (a != HE_NO_SENSOR && a == b) return;   // a key cannot cancel itself
+            if ((a == HE_NO_SENSOR) != (b == HE_NO_SENSOR)) return;   // two keys, or none
+            if (a != HE_NO_SENSOR && a == b) return;                    // a key cannot cancel itself
             he_cancel_a = a;
             he_cancel_b = b;
             cancel_reset_state();

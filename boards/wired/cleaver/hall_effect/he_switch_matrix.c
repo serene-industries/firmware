@@ -374,8 +374,9 @@ bool he_update_key_keycancel(matrix_row_t* current_matrix, uint8_t row, uint8_t 
             if (sensor_id == he_cancel_b) he_cancel_b_down = true;
 
             // Special handling for A and D keys (sensor 32 and 34)
-            if ((sensor_id == he_cancel_b && latest_pressed == he_cancel_a) ||
-                (sensor_id == he_cancel_a && latest_pressed == he_cancel_b)) {
+            if (he_cancel_a != HE_NO_SENSOR && he_cancel_b != HE_NO_SENSOR &&
+                ((sensor_id == he_cancel_b && latest_pressed == he_cancel_a) ||
+                 (sensor_id == he_cancel_a && latest_pressed == he_cancel_b))) {
                 // Cancel the previous key
                 uint8_t prev_sensor = (sensor_id == he_cancel_b) ? he_cancel_a : he_cancel_b;
                 current_matrix[sensor_to_matrix_map[prev_sensor].row] &= ~(1UL << sensor_to_matrix_map[prev_sensor].col);
