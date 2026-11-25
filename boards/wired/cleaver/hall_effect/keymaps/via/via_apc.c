@@ -17,6 +17,7 @@
 //keyboards/cleaver/keymaps/via/via_apc.c
 #include "he_switch_matrix.h"
 #include "he_stream.h"
+#include "he_perkey.h"
 #include "action.h"
 #include "via.h"
 #include "config.h"
@@ -54,6 +55,11 @@ enum via_he_enums {
     // Write-only: 1 starts (and keeps alive) the real-time travel stream for
     // the configurator visualizer, 0 stops it. See he_stream.c.
     id_set_live_stream = HE_STREAM_VALUE_ID,
+    // One key's levels, the key-cancel pair, the board ID, what this firmware supports: he_perkey.h
+    id_he_info = HE_VAL_INFO,
+    id_he_key = HE_VAL_KEY,
+    id_he_cancel_pair = HE_VAL_CANCEL,
+    id_he_board_uid = HE_VAL_UID,
     // clang-format on
 };
 
@@ -103,6 +109,11 @@ void via_he_config_set_value(uint8_t *data) {
         case id_set_live_stream: {
             he_stream_set(value_data != 0);
             break;
+        }
+        case id_he_key:
+        case id_he_cancel_pair: {
+            he_perkey_set(data);
+            return;
         }
         case id_via_he_actuation_threshold: {
             if (value_data >= 10 && value_data <= 90) {
@@ -194,6 +205,7 @@ void via_he_config_set_value(uint8_t *data) {
         }
         case id_toggle_actuation_mode: {
             he_config.he_actuation_mode = value_data;
+            he_perkey_mark_dirty();   // the mode now survives a power cycle
             uprintf("[SYSTEM]: Actuation mode toggled! mode: %d\n", he_config.he_actuation_mode);
             break;
         }
@@ -202,6 +214,7 @@ void via_he_config_set_value(uint8_t *data) {
                 he_key_rapid_trigger_configs[i].deadzone = value_data;
                 eeconfig_update_user_datablock(&eeprom_he_key_configs);
             }
+            he_perkey_mark_dirty();   // rapid-trigger numbers are stored now
             last_moved_slider = SLIDER_TYPE_RTP_DEADZONE;
             current_slider_type = SLIDER_TYPE_RTP_DEADZONE;
             slider_active = true;
@@ -215,6 +228,7 @@ void via_he_config_set_value(uint8_t *data) {
             for (int i = 0; i < SENSOR_COUNT; i++) {
                 he_key_rapid_trigger_configs[i].engage_distance = value_data;
             }
+            he_perkey_mark_dirty();   // rapid-trigger numbers are stored now
             last_moved_slider = SLIDER_TYPE_RTP_ENGAGE;
             current_slider_type = SLIDER_TYPE_RTP_ENGAGE;
             slider_active = true;
@@ -228,6 +242,7 @@ void via_he_config_set_value(uint8_t *data) {
             for (int i = 0; i < SENSOR_COUNT; i++) {
                 he_key_rapid_trigger_configs[i].disengage_distance = value_data;
             }
+            he_perkey_mark_dirty();   // rapid-trigger numbers are stored now
             last_moved_slider = SLIDER_TYPE_RTP_DISENGAGE;
             current_slider_type = SLIDER_TYPE_RTP_DISENGAGE;
             slider_active = true;
@@ -249,6 +264,12 @@ void via_he_config_get_value(uint8_t *data) {
     uprintf("[SYSTEM]: Getting config value. ID: %d\n", value_id);
 
     switch (value_id) {
+        case id_he_info:
+        case id_he_key:
+        case id_he_cancel_pair:
+        case id_he_board_uid:
+            he_perkey_get(data);
+            break;
         case id_via_he_actuation_threshold:
             *value_data = he_key_configs[0].he_actuation_threshold;
             uprintf("via_he_config_get_value with (%d) id_via_he_actuation_threshold\n", *value_data);

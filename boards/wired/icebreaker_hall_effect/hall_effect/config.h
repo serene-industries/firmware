@@ -50,7 +50,11 @@
     { B3, B4, B6, B5 }
 
 #define ANALOG_PORT A3
-#define EECONFIG_KB_DATA_SIZE 3 //
+// mode block (3) + layout mark (2) + key-cancel pair (2) + rapid-trigger numbers (3 per sensor)
+#define EECONFIG_KB_DATA_SIZE (7 + 3 * SENSOR_COUNT)
+// Key cancel defaults to A and D (sensor ids from sensor_to_matrix_map)
+#define HE_DEFAULT_CANCEL_A 32
+#define HE_DEFAULT_CANCEL_B 34
 #define WEAR_LEVELING_LOGICAL_SIZE 2048
 #define WEAR_LEVELING_BACKING_SIZE 16384
 
