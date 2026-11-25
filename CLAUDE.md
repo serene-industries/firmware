@@ -102,3 +102,24 @@
   configurator's bundled `tests/he/emu-driver.ts` it also checks that the
   emulated board answers every packet as this source does. Run it before any
   HE release; it proves the logic, not the MCU.
+
+## The instrument mode (branch work, test builds Icebreaker HE 1.0.6 / Cleaver HE 0.4.2.16, 2026-11-25; unseen on a board)
+
+- `he_synth.c` / `he_synth.h` in each HE board folder (identical, in `SRC`). Off at power-up; the keycode SYNTH
+  (QK_KB_9, on the function layer beside the mode keys) or VIA value id 27 switches it. While on, a key whose
+  base-layer keycode is a note key (tracker layout: Z row and Q row naturals, sharps on the row above each)
+  does not type: `he_matrix_scan` hands it to `he_synth_key` and skips the typing path. Every other key types.
+- Velocity is the time from the first depth to the second (12 % and 60 %), counted in scans and placed between
+  scans from the readings either side of each crossing; converted with the measured scan rate; 2 ms and under is
+  127, 80 ms and over is 1. Past the second depth travel is polyphonic pressure (a hundred a second per key at
+  most). The note ends above the release depth (30 %). A change of mode, octave or channel ends what sounds
+  first, on the channel it was started on.
+- Nothing is stored: the settings are the defaults after a power cycle, and the EEPROM layout is unchanged.
+- **USB changed**: `MIDI_ENABLE = yes` and `"console": false`. The STM32F411 has three endpoints besides the
+  control one; MIDI took the console's. The debug printers are empty without the console, so DEBUG0 to DEBUG5
+  do nothing in these builds. A board with this build enumerates as keyboard + raw HID + MIDI; nobody has seen
+  that on a board yet, which is why it is a test build.
+- The scan rate is measured (`he_synth_scan_begin`, half-second windows) and reported in info d[7..8] and in id 27.
+- The stream's start value 2 asks for 250 frames a second (4 ms); 1 is 125 as before.
+- Host tests: `run_synth` in `tests/host/run.py` (a strike, its velocity against its speed, pressure, the note's
+  end, typing kept apart), and the comparison with the configurator's emulated board covers id 27 and the notes.
