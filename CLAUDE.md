@@ -36,7 +36,7 @@
   magic is pinned (open decision; see si-configurator ROADMAP).
 
 
-## Per-key HE settings (branch work, 2026-11-25, not released)
+## Per-key HE settings (on main since 2026-11-25; test builds Icebreaker HE 1.0.5 and Cleaver HE 0.4.2.15)
 
 - `he_perkey.c` / `he_perkey.h` in each HE board folder (identical files, listed
   in `SRC`): VIA custom value ids 22 info, 23 one key's levels by matrix row and
