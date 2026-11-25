@@ -193,7 +193,8 @@ int he_init(he_key_config_t he_key_configs[], size_t count) {
     eeconfig_read_kb_datablock(&eeprom_he_config);
     eeconfig_read_user_datablock(&eeprom_he_key_configs);
 
-    if (eeprom_he_config.he_post_flash == false || !he_perkey_layout_ok()) {
+    bool carried = he_perkey_carry_over();   // coming from firmware before per-key settings: levels and calibration kept
+    if (!carried && (eeprom_he_config.he_post_flash == false || !he_perkey_layout_ok())) {
         eeprom_he_config.he_post_flash = true;
         // set RT and eeprom from defaults
         for (int i = 0; i < SENSOR_COUNT; i++) {

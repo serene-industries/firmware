@@ -1,0 +1,25 @@
+name: Host tests (HE boards)
+
+# Runs the Hall-effect boards' real source on the runner (tests/host): VIA
+# commands, the scan, what is stored over a power cycle. No QMK checkout, no
+# binaries, nothing published. See tests/host/README.md.
+
+on:
+  push:
+    paths:
+      - 'boards/wired/cleaver/**'
+      - 'boards/wired/icebreaker_hall_effect/**'
+      - 'tests/host/**'
+      - '.github/workflows/host-tests.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  host-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run
+        run: python3 tests/host/run.py

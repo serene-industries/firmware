@@ -56,3 +56,16 @@
   once. The deadzone getter answers in two bytes, high first.
 - The configurator's client functions and an emulated board written from this
   source live in `si-configurator` (`lib/viaProtocol.ts`, `tests/he/`).
+- A board coming from the firmware before this layout keeps its levels and its
+  calibration: `he_perkey_carry_over()` reads the old per-key block from where
+  it sat (straight after the old 3-byte keyboard block) before anything is
+  written. Without it the longer keyboard block makes the core report both
+  blocks invalid and the board starts from defaults, calibration included.
+  The keymap and macros are still erased by a flash from another day.
+- `tests/host/` runs the boards' real source on a computer (`python3
+  tests/host/run.py`, also a workflow on every push that touches the HE
+  boards): VIA packets in, replies out, keys held through a stand-in ADC, the
+  real scan, the EEPROM kept in a file across power cycles. Given the
+  configurator's bundled `tests/he/emu-driver.ts` it also checks that the
+  emulated board answers every packet as this source does. Run it before any
+  HE release; it proves the logic, not the MCU.

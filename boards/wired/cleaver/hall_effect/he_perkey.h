@@ -42,6 +42,7 @@ extern bool    he_cancel_b_down;
 
 uint8_t he_sensor_at(uint8_t row, uint8_t col);
 bool    he_perkey_layout_ok(void);   // the stored block is in this firmware's layout
+bool    he_perkey_carry_over(void);  // a board from firmware before this layout: keep its levels and calibration
 void    he_perkey_defaults(void);    // fresh board, or a block in another layout
 void    he_perkey_load(void);        // stored block -> runtime
 void    he_perkey_get(uint8_t *d);

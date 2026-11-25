@@ -63,6 +63,44 @@ void he_perkey_defaults(void) {
     he_perkey_load();
 }
 
+// A board coming from firmware before per-key settings has a 3-byte keyboard block with the
+// per-key block (levels and calibration) straight after it. This firmware's keyboard block is
+// longer, so the core reports the old one as invalid and the per-key block has moved. Read the
+// old per-key block from where it was, before anything is written, so the update does not cost
+// the calibration. he_init() calls this once, right after it has read both blocks.
+#define HE_OLD_KB_DATA_SIZE 3
+bool he_perkey_carry_over(void) {
+    if (eeprom_read_dword(EECONFIG_KEYBOARD) != HE_OLD_KB_DATA_SIZE) return false;
+    if (eeprom_read_dword(EECONFIG_USER) != (EECONFIG_USER_DATA_SIZE)) return false;
+    uint8_t old_kb[HE_OLD_KB_DATA_SIZE];
+    eeprom_read_block(old_kb, EECONFIG_KB_DATABLOCK, HE_OLD_KB_DATA_SIZE);
+    if (old_kb[1] != 1) return false;   // he_post_flash: the old firmware never finished a first boot
+    eeprom_read_block(&eeprom_he_key_configs, EECONFIG_KB_DATABLOCK + HE_OLD_KB_DATA_SIZE, sizeof(eeprom_he_key_configs));
+    for (int i = 0; i < SENSOR_COUNT; i++) {
+        uint8_t act = eeprom_he_key_configs[i].he_actuation_threshold, rel = eeprom_he_key_configs[i].he_release_threshold;
+        if (!(act >= 10 && act <= 90 && rel >= 10 && rel <= 90 && rel < act)) {
+            eeprom_he_key_configs[i].he_actuation_threshold = DEFAULT_ACTUATION_LEVEL;
+            eeprom_he_key_configs[i].he_release_threshold   = DEFAULT_RELEASE_LEVEL;
+        }
+        if (eeprom_he_key_configs[i].noise_ceiling == 0 || eeprom_he_key_configs[i].noise_ceiling == 0xFFFF) {
+            eeprom_he_key_configs[i].noise_ceiling = EXPECTED_NOISE_CEILING;
+        }
+    }
+    eeprom_he_config.he_calibration_mode = false;
+    eeprom_he_config.he_post_flash       = true;
+    eeprom_he_config.he_actuation_mode   = ACTUATION_MODE_NORMAL;   // the old firmware always started in normal
+    eeprom_he_config.layout_magic[0]     = HE_MAGIC_0;
+    eeprom_he_config.layout_magic[1]     = HE_MAGIC_1;
+    eeprom_he_config.cancel_pair[0]      = HE_DEFAULT_CANCEL_A;
+    eeprom_he_config.cancel_pair[1]      = HE_DEFAULT_CANCEL_B;
+    for (int i = 0; i < SENSOR_COUNT; i++) {
+        eeprom_he_config.rt[i][0] = DEFAULT_DEADZONE_RT;
+        eeprom_he_config.rt[i][1] = DEFAULT_RELEASE_DISTANCE_RT;
+        eeprom_he_config.rt[i][2] = DEFAULT_RELEASE_DISTANCE_RT;
+    }
+    return true;
+}
+
 void he_perkey_load(void) {
     for (int i = 0; i < SENSOR_COUNT; i++) {
         he_key_rapid_trigger_configs[i].deadzone           = clampu8(eeprom_he_config.rt[i][0], 5, 60);
@@ -195,6 +233,7 @@ void he_perkey_set(uint8_t *d) {
 #else   // no VIA: the pair keeps its defaults and nothing is stored
 
 bool he_perkey_layout_ok(void) { return true; }
+bool he_perkey_carry_over(void) { return false; }
 void he_perkey_defaults(void) {}
 void he_perkey_load(void) {}
 void he_perkey_get(uint8_t *d) { (void)d; }
