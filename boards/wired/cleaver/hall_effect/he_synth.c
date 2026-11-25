@@ -212,6 +212,9 @@ void he_synth_set(uint8_t *d) {
     if (d[1] == 0) {
         he_synth_set_on(d[2] != 0);
     } else if (d[1] == 1) {
+        if (d[5] != 0xFF || d[6] != 0xFF) {   // the channel or the notes move: what sounds is ended first, where it was started
+            for (uint8_t s = 0; s < SENSOR_COUNT; s++) end_note(&key[s], 64);
+        }
         if (d[2] != 0xFF) depth_a = within(d[2], 5, 50);
         if (d[3] != 0xFF) depth_b = d[3];
         depth_b = within(depth_b, depth_a + 10, 90);
@@ -219,7 +222,6 @@ void he_synth_set(uint8_t *d) {
         depth_rel = within(depth_rel, 5, depth_b - 5);
         if (d[5] != 0xFF) channel = d[5] & 0x0F;
         if (d[6] != 0xFF) {
-            for (uint8_t s = 0; s < SENSOR_COUNT; s++) end_note(&key[s], 64);   // the notes move: none may be left sounding
             octave = within(d[6], 0, 4);
             map_notes();
         }

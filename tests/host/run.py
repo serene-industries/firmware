@@ -439,6 +439,8 @@ def run_synth(board, title):
     check('changing the octave ends the notes that sound', len([e for e in o.events if e[0] == 'off']) >= 2, str(o.events))
     g = o.replies[-1]
     check('the depths are kept apart and in range: 5 / 15 / 10, channel 4, octave top, pressure off', g[7:13] == [5, 15, 10, 3, 4, 0], str(g[7:13]))
+    o = boot(binary, ee, KEYS + WARM + [ON] + strike(Z, 8) + [S(SET, 0, 27, 1, 0xFF, 0xFF, 0xFF, 5, 0xFF, 0xFF), 'E'])
+    check('changing the channel ends the note on the channel it was started on', [e[:3] for e in o.events] == [('on', 0, 48), ('off', 0, 48)], str(o.events))
 
 run_board('icebreaker_hall_effect', 'Icebreaker HE')
 run_synth('icebreaker_hall_effect', 'Icebreaker HE')
