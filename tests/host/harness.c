@@ -137,7 +137,7 @@ int main(int argc, char **argv) {
         } else if (!strncmp(line, "RAW", 3)) {
             int s, v; if (sscanf(line + 4, "%d %d", &s, &v) == 2) host_adc[s] = (uint16_t)v;
         } else if (line[0] == 'N') {
-            int n = atoi(line + 2); for (int i = 0; i < n; i++) { host_now += 1; he_matrix_scan(); }
+            int n = atoi(line + 2); for (int i = 0; i < n; i++) he_matrix_scan();   // time passes only with T
         } else if (line[0] == 'M') {
             fprintf(stdout, "M");
             for (int r = 0; r < MATRIX_ROWS; r++) fprintf(stdout, " %04x", (unsigned)matrix[r]);
@@ -155,9 +155,9 @@ int main(int argc, char **argv) {
             int s = atoi(line + 2);
             fprintf(stdout, "V %d %d\n", s, he_live_travel[sensor_to_matrix_map[s].row][sensor_to_matrix_map[s].col]);
         } else if (line[0] == 'L') {
-            fprintf(stdout, "LAYOUT base %d kbdword %d userdword %d kbsize %d usersize %d sensors %d rows %d cols %d floor %d ceiling %d\n",
+            fprintf(stdout, "LAYOUT base %d kbdword %d userdword %d kbsize %d usersize %d sensors %d rows %d cols %d floor %d ceiling %d calstart %d pairs %d\n",
                     (int)EECONFIG_BASE_SIZE, (int)(size_t)EECONFIG_KEYBOARD, (int)(size_t)EECONFIG_USER, (int)(EECONFIG_KB_DATA_SIZE), (int)(EECONFIG_USER_DATA_SIZE),
-                    SENSOR_COUNT, MATRIX_ROWS, MATRIX_COLS, EXPECTED_NOISE_FLOOR, EXPECTED_NOISE_CEILING);
+                    SENSOR_COUNT, MATRIX_ROWS, MATRIX_COLS, EXPECTED_NOISE_FLOOR, EXPECTED_NOISE_CEILING, HE_CAL_START_CEILING, HE_CANCEL_PAIRS);
         }
         fflush(stdout);
     }

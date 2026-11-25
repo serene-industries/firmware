@@ -19,7 +19,7 @@ def check(name, cond, detail=''):
 
 class Out:
     def __init__(self, text):
-        self.replies, self.matrices, self.keys, self.travel, self.warn = [], [], {}, {}, []
+        self.replies, self.matrices, self.keys, self.travel, self.warn, self.travels = [], [], {}, {}, [], []
         self.mode = self.pair = self.layout = self.cal = None; self.pairs = {}
         for ln in text.splitlines():
             p = ln.split()
@@ -32,7 +32,7 @@ class Out:
                 self.pairs[int(p[1])] = (int(p[2]), int(p[3]))
                 if p[1] == '0': self.pair = (int(p[2]), int(p[3]))
             elif p[0] == 'CAL': self.cal = int(p[1])
-            elif p[0] == 'V': self.travel[int(p[1])] = int(p[2])
+            elif p[0] == 'V': self.travel[int(p[1])] = int(p[2]); self.travels.append((int(p[1]), int(p[2])))
             elif p[0] == 'LAYOUT': self.layout = {p[i]: int(p[i + 1]) for i in range(1, len(p), 2)}
             elif p[0] == 'WARN': self.warn.append(ln)
 
@@ -285,34 +285,49 @@ def run_board(board, title):
         spots = list(sensor.keys())
         script = []
         def byte(): return rng.choice([0, 1, 2, 5, 9, 10, 11, 12, 20, 22, 26, 30, 44, 50, 51, 60, 89, 90, 91, 120, 200, 254, 255])
+        lo, hi = (L['floor'] - 40, L['floor'] + 220) if not falling else (0, L['floor'] + 50)
+        real = [i for i in range(L['sensors']) if not (enc and i == 68)]
         for _ in range(1500):
             x = rng.random()
             pos = rng.choice(spots) if rng.random() < 0.9 else empty
-            if x < 0.10: script.append(('S', [SET, 0, 1, byte()]))
-            elif x < 0.20: script.append(('S', [SET, 0, 2, byte()]))
-            elif x < 0.23: script.append(('S', [SET, 0, 3]))
-            elif x < 0.28: script.append(('S', [SET, 0, 6, rng.choice([0, 1, 2])]))
-            elif x < 0.36: script.append(('S', [SET, 0, rng.choice([7, 8, 9]), byte()]))
-            elif x < 0.52: script.append(('S', [SET, 0, 23, pos[0], pos[1], byte(), byte(), byte(), byte(), byte()]))
-            elif x < 0.60:
-                p2 = rng.choice(spots)
-                script.append(('S', [SET, 0, 24, rng.choice([0, 0, 0, 1]), *(pos if rng.random() < 0.85 else (0xFF, 0xFF)), *(p2 if rng.random() < 0.85 else (0xFF, 0xFF))]))
-            elif x < 0.72: script.append(('S', [GET, 0, 23, pos[0], pos[1]]))
-            elif x < 0.80: script.append(('S', [GET, 0, rng.choice([1, 2, 6, 7, 8, 9])]))
-            elif x < 0.84: script.append(('S', [GET, 0, 24, rng.choice([0, 0, 1])]))
-            elif x < 0.86: script.append(('S', [GET, 0, rng.choice([22, 25])]))
-            elif x < 0.88: script.append(('S', [0x09, 0]))
+            if x < 0.08: script.append(('S', [SET, 0, 1, byte()]))
+            elif x < 0.16: script.append(('S', [SET, 0, 2, byte()]))
+            elif x < 0.18: script.append(('S', [SET, 0, 3]))
+            elif x < 0.22: script.append(('S', [SET, 0, 6, rng.choice([0, 1, 2])]))
+            elif x < 0.28: script.append(('S', [SET, 0, rng.choice([7, 8, 9]), byte()]))
+            elif x < 0.40: script.append(('S', [SET, 0, 23, pos[0], pos[1], byte(), byte(), byte(), byte(), byte()]))
+            elif x < 0.50:
+                p2 = rng.choice(spots[:12] if rng.random() < 0.5 else spots)   # a small pool, so keys collide across pairs
+                p1 = rng.choice(spots[:12]) if rng.random() < 0.5 else pos
+                script.append(('S', [SET, 0, 24, rng.choice([0, 0, 1, 1, 2, 3, 7, 8]), *(p1 if rng.random() < 0.85 else (0xFF, 0xFF)), *(p2 if rng.random() < 0.85 else (0xFF, 0xFF))]))
+            elif x < 0.58: script.append(('S', [GET, 0, 23, pos[0], pos[1]]))
+            elif x < 0.64: script.append(('S', [GET, 0, rng.choice([1, 2, 6, 7, 8, 9])]))
+            elif x < 0.69: script.append(('S', [GET, 0, 24, rng.choice([0, 0, 1, 2, 3, 7, 8])]))
+            elif x < 0.71: script.append(('S', [GET, 0, rng.choice([22, 25])]))
+            elif x < 0.72: script.append(('S', [0x09, 0]))
+            elif x < 0.74: script.append(('S', [SET, 0, 4]))
+            elif x < 0.755: script.append(('S', [SET, 0, 5]))
+            elif x < 0.765: script.append(('S', [SET, 0, 26, 0]))
+            elif x < 0.78: script.append(('S', [SET, 0, 26, 1, pos[0], pos[1]]))
+            elif x < 0.81: script.append(('S', [GET, 0, 26, 0]))
+            elif x < 0.84: script.append(('S', [GET, 0, 26, 1, pos[0], pos[1]]))
+            elif x < 0.89: script.append(('RAW', [rng.choice(real[:10] if rng.random() < 0.6 else real), rng.randint(lo, hi)]))
+            elif x < 0.92: script.append(('N', rng.randint(1, 6)))
+            elif x < 0.95: script.append(('V', rng.choice(real[:10] if rng.random() < 0.6 else real)))
             else: script.append(('T', rng.choice([100, 400, 900, 1500, 1990, 2010, 2500, 4000])))
         fresh(ee)
-        fw = boot(binary, ee, [('S ' + ' '.join('%02x' % b for b in a)) if op == 'S' else 'T %d' % a for op, a in script]).replies
+        line = {'S': lambda a: 'S ' + ' '.join('%02x' % b for b in a), 'T': lambda a: 'T %d' % a, 'RAW': lambda a: 'RAW %d %d' % tuple(a), 'N': lambda a: 'N %d' % a, 'V': lambda a: 'V %d' % a}
+        fwo = boot(binary, ee, [line[op](a) for op, a in script]); fw = fwo.replies
         opts = dict(name=title, vendorId=0x5363, productId=0x0010, rows=L['rows'], cols=L['cols'], sensors=[[o.keys[i]['row'], o.keys[i]['col']] for i in range(L['sensors'])],
-                    defaultPair=[sA, sD], perKey=True, uid=[0x44, 0x33, 0x22, 0x11, 0x88, 0x77, 0x66, 0x55, 0xCC, 0xBB, 0xAA, 0x99], version=[1, 0, 5, 0])
+                    defaultPair=[sA, sD], rest=L['floor'], bottom=L['ceiling'], calStart=L['calstart'], alias=({'68': 18} if enc else {}), noTravel=([68] if enc else []), perKey=True, uid=[0x44, 0x33, 0x22, 0x11, 0x88, 0x77, 0x66, 0x55, 0xCC, 0xBB, 0xAA, 0x99], version=[1, 0, 5, 0])
         job = os.path.join(tmp, board + '.job.json'); json.dump(dict(options=opts, script=script), open(job, 'w'))
         r = subprocess.run(['node', emu, job], capture_output=True, text=True, timeout=120)
         em = [[int(x, 16) for x in ln.split()[1:]] for ln in r.stdout.splitlines() if ln.startswith('R')]
+        emv = [tuple(int(x) for x in ln.split()[1:]) for ln in r.stdout.splitlines() if ln.startswith('V')]
         sends = [a for op, a in script if op == 'S']
         check('emulated board answered every packet', len(em) == len(fw) == len(sends), '%d %d %d %s' % (len(em), len(fw), len(sends), r.stderr[-300:]))
         diffs = [(i, sends[i], fw[i][:12], em[i][:12]) for i in range(min(len(em), len(fw))) if fw[i] != em[i]]
+        check('emulated board shows the travel the firmware streams (%d readings)' % len(emv), emv == fwo.travels, str([(a, b) for a, b in zip(emv, fwo.travels) if a != b][:4]))
         check('emulated board = firmware on %d packets' % len(sends), not diffs, '\n    first differences (packet, firmware, emulated): ' + '\n    '.join(str(d) for d in diffs[:4]))
 
 run_board('icebreaker_hall_effect', 'Icebreaker HE')
