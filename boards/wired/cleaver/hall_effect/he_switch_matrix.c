@@ -19,6 +19,7 @@
 #include "wait.h"
 #include "eeprom.h"
 #include "he_perkey.h"
+#include "he_synth.h"
 #include "math.h"
 #include "timer.h" // Debugging
 #include "raw_hid.h"
@@ -430,6 +431,8 @@ bool he_is_suspended(void) { return he_suspended; }
 bool he_matrix_scan(void) {
     bool updated = false;
 
+    he_synth_scan_begin();   // counts scans: the scan rate the configurator shows, and the clock a strike is timed on
+
     if (he_config.he_calibration_mode) {
         noise_ceiling_calibration();
         return false;
@@ -459,6 +462,13 @@ bool he_matrix_scan(void) {
         }
 
         he_live_travel[row][col] = rescale(sensor_value, sensor_id);
+
+        // In synth mode a note key plays and does not type (he_synth.c). Its typing state is put at rest.
+        if (he_synth_key(matrix, sensor_id, row, col, sensor_value, &updated)) {
+            debounce_matrix[row][col].debounced_state  = false;
+            debounce_matrix[row][col].debounce_counter = 0;
+            continue;
+        }
 
         if (he_config.he_actuation_mode == 0) {
             if (he_update_key(matrix, row, col, sensor_id, sensor_value)) {

@@ -20,7 +20,7 @@ def check(name, cond, detail=''):
 class Out:
     def __init__(self, text):
         self.replies, self.matrices, self.keys, self.travel, self.warn, self.travels = [], [], {}, {}, [], []
-        self.mode = self.pair = self.layout = self.cal = None; self.pairs = {}
+        self.mode = self.pair = self.layout = self.cal = None; self.pairs = {}; self.events = []
         for ln in text.splitlines():
             p = ln.split()
             if not p: continue
@@ -35,6 +35,7 @@ class Out:
             elif p[0] == 'V': self.travel[int(p[1])] = int(p[2]); self.travels.append((int(p[1]), int(p[2])))
             elif p[0] == 'LAYOUT': self.layout = {p[i]: int(p[i + 1]) for i in range(1, len(p), 2)}
             elif p[0] == 'WARN': self.warn.append(ln)
+            elif p[0] == 'E' and p[1] != '.': self.events.append((p[1], int(p[2]), int(p[3]), int(p[4])))
 
 def boot(binary, ee, lines):
     """One power cycle: run the script, return what the firmware printed."""
@@ -84,7 +85,7 @@ def run_board(board, title):
         check('no two keys share a mux channel', not o.warn, str(o.warn[:2]))
         info = o.replies[0]
         check('info: protocol, sensors, rows, cols', info[3:7] == [1, L['sensors'], L['rows'], L['cols']], str(info[:9]))
-        check('info: features per-key, pairs, stored, id, calibration; 8 pairs', info[7] == 0x1F and info[8] == 8, '%s %s' % (hex(info[7]), info[8]))
+        check('info: features per-key, pairs, stored, id, calibration, synth, fast stream; 8 pairs', info[7] == 0x7F and info[8] == 8, '%s %s' % (hex(info[7]), info[8]))
         check('fresh key reads 50 30 15 10 10', o.replies[1][5:11] == [1, 50, 30, 15, 10, 10], str(o.replies[1][:11]))
         check('fresh pair is A and D', o.replies[2][4:9] == [1, 2, 1, 2, 3], str(o.replies[2][:9]))
         check('board id has 12 bytes', any(o.replies[3][3:15]) and not any(o.replies[3][15:]), str(o.replies[3][:16]))
@@ -353,7 +354,86 @@ def run_board(board, title):
         check('emulated board shows the travel the firmware streams (%d readings)' % len(emv), emv == fwo.travels, str([(a, b) for a, b in zip(emv, fwo.travels) if a != b][:4]))
         check('emulated board = firmware on %d packets' % len(sends), not diffs, '\n    first differences (packet, firmware, emulated): ' + '\n    '.join(str(d) for d in diffs[:4]))
 
+def run_synth(board, title):
+    """The instrument mode: the scan rate, a strike timed between two depths, pressure, the note's end, and typing kept apart."""
+    print('==', title, '(instrument)')
+    binary = os.path.join(tmp, board); ee = os.path.join(tmp, board + '.synth.ee')
+    fresh(ee)
+    o = boot(binary, ee, ['D'])
+    at = {(k['row'], k['col']): s for s, k in o.keys.items()}
+    Z, X_, Q, A = at[(3, 1)], at[(3, 2)], at[(1, 1)], at[(2, 1)]
+    KEYS = ['KC 3 1 1d', 'KC 3 2 1b', 'KC 1 1 14', 'KC 2 1 04']          # Z, X, Q are notes; A is not
+    WARM = ['X 600 600']                                                 # a thousand scans a second
+    ON, OFF = S(SET, 0, 27, 0, 1) + '\nX 5 5', S(SET, 0, 27, 0, 0)   # the mode on, then a few scans with the keys at rest
+    GETS = S(GET, 0, 27, 0)
+    def strike(s, scans, to=1000, start=0):                              # travel from start to `to` in that many scans, a millisecond each
+        return ['P %d %d' % (s, start)] + [l for i in range(1, scans + 1) for l in ('P %d %d' % (s, start + (to - start) * i // scans), 'X 1 1')]
+    def bit(m, pos): return (m[pos[0]] >> pos[1]) & 1
+
+    o = boot(binary, ee, KEYS + WARM + [GETS, S(GET, 0, 22)])
+    r, info = o.replies[0], o.replies[1]
+    check('off at power-up; 1000 scans a second measured', r[4] == 0 and 990 <= r[5] * 256 + r[6] <= 1010, str(r[:10]))
+    check('depths 12 / 60 / 30, channel 1, middle octave, pressure on', r[7:13] == [12, 60, 30, 0, 2, 1], str(r[7:13]))
+    check('a host build says it has no MIDI interface', r[19] == 0)
+    check('info carries the scan rate too', 990 <= info[9] * 256 + info[10] <= 1010, str(info[:12]))
+
+    # the mode off: note keys type, nothing is played
+    o = boot(binary, ee, KEYS + WARM + strike(Z, 8) + ['X 20 20', 'M', 'E'])
+    check('mode off: Z types and plays nothing', bit(o.matrices[0], (3, 1)) == 1 and not o.events, str(o.events))
+
+    # a strike: 0 to the bottom in 8 ms; then pressure; then the end
+    o = boot(binary, ee, KEYS + WARM + [ON] + strike(Z, 8) + ['M', 'E', GETS, 'P %d 800' % Z, 'X 15 15', 'E', 'P %d 0' % Z, 'X 3 3', 'E', 'M'])
+    ev = o.events
+    check('a strike is one note on: C3', len(ev) >= 1 and ev[0][0] == 'on' and ev[0][2] == 48, str(ev[:3]))
+    v8 = ev[0][3] if ev else 0
+    check('8 ms from top to bottom is a hard strike (velocity %d)' % v8, 98 <= v8 <= 112, str(v8))
+    check('the note key does not type while the mode is on', bit(o.matrices[0], (3, 1)) == 0 and bit(o.matrices[1], (3, 1)) == 0)
+    g = o.replies[1]
+    check('read-back: mode on, one note, C3, its velocity, about 3.8 ms between the depths', g[4] == 1 and g[13] * 256 + g[14] == 1 and g[15] == 48 and g[16] == v8 and 34 <= g[17] * 256 + g[18] <= 42, str(g[4:19]))
+    pr = [e for e in ev if e[0] == 'pr']
+    check('past the second depth, travel is pressure: 80 % is 63', pr and pr[-1][2] == 48 and 61 <= pr[-1][3] <= 65, str(pr[-3:]))
+    check('pressure is sent a hundred times a second at most', len(pr) <= 3, str(len(pr)))
+    off = [e for e in ev if e[0] == 'off']
+    check('letting go ends the note, fast', len(off) == 1 and off[0][2] == 48 and off[0][3] > 90, str(off))
+
+    # velocity follows the speed, and does not depend on where between two scans the key started
+    vel = {}
+    for ms in (1, 4, 8, 16, 40, 120):
+        o = boot(binary, ee, KEYS + WARM + [ON] + strike(Z, ms) + ['E'])
+        vel[ms] = o.events[0][3] if o.events and o.events[0][0] == 'on' else -1
+    check('slower is softer; under 2 ms between the depths is the hardest there is: %s' % vel, all(vel[a] > vel[b] for a, b in zip((4, 8, 16, 40), (8, 16, 40, 120))) and vel[1] == vel[4] == 127 and 1 <= vel[120] <= 20, str(vel))
+    shifted = []
+    for start in (0, 30, 60, 90):
+        o = boot(binary, ee, KEYS + WARM + [ON] + strike(Z, 8, 1000 + start, start) + ['E'])
+        shifted.append(o.events[0][3] if o.events else -1)
+    check('the same strike started a little earlier or later gives the same velocity: %s' % shifted, max(shifted) - min(shifted) <= 3, str(shifted))
+
+    # a press that turns back before the second depth is no note; a key that is not a note key types
+    o = boot(binary, ee, KEYS + WARM + [ON] + strike(Z, 6, 400) + strike(Z, 6, 0, 400) + ['E'] + strike(A, 8) + ['X 20 20', 'M', 'E'])
+    check('half a press is no note', not o.events, str(o.events))
+    check('a key that is not a note key types as usual in the mode', bit(o.matrices[0], (2, 1)) == 1)
+
+    # a key held as a typing key when the mode comes on: let go of as a typing key, and no strike
+    o = boot(binary, ee, KEYS + WARM + strike(Z, 8) + ['X 20 20', 'M', ON, 'M', 'E'])
+    check('held when the mode comes on: no longer typed, not struck', bit(o.matrices[0], (3, 1)) == 1 and bit(o.matrices[1], (3, 1)) == 0 and not o.events, str(o.events))
+
+    # the mode off while a note sounds: the note ends; then the key types again
+    o = boot(binary, ee, KEYS + WARM + [ON] + strike(Z, 8) + ['E', OFF, 'E', 'P %d 0' % Z, 'X 30 30'] + strike(Z, 8) + ['X 20 20', 'M', 'E'])
+    check('leaving the mode ends what sounds', [e[0] for e in o.events] == ['on', 'off'], str(o.events))
+    check('and the key types again', bit(o.matrices[0], (3, 1)) == 1)
+
+    # the other notes, the octave, the limits
+    o = boot(binary, ee, KEYS + WARM + [ON] + strike(Q, 8) + strike(X_, 8) + ['E', S(SET, 0, 27, 1, 0xFF, 0xFF, 0xFF, 0xFF, 3, 0xFF), 'P %d 0' % Z, 'X 5 5'] + strike(Z, 8) + ['E',
+              S(SET, 0, 27, 1, 2, 5, 99, 0x13, 9, 0), GETS])
+    on = [e for e in o.events if e[0] == 'on']
+    check('Q is C4, X is D3; an octave up Z is C4', [e[2] for e in on] == [60, 50, 60], str(on))
+    check('changing the octave ends the notes that sound', len([e for e in o.events if e[0] == 'off']) >= 2, str(o.events))
+    g = o.replies[-1]
+    check('the depths are kept apart and in range: 5 / 15 / 10, channel 4, octave top, pressure off', g[7:13] == [5, 15, 10, 3, 4, 0], str(g[7:13]))
+
 run_board('icebreaker_hall_effect', 'Icebreaker HE')
+run_synth('icebreaker_hall_effect', 'Icebreaker HE')
 run_board('cleaver', 'Cleaver HE')
+run_synth('cleaver', 'Cleaver HE')
 print('%d passed, %d failed' % (passed, failed))
 sys.exit(1 if failed else 0)

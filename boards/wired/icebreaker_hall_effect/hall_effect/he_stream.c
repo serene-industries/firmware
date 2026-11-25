@@ -16,7 +16,7 @@
 #include "he_stream.h"
 
 #ifndef RAW_ENABLE
-void he_stream_set(bool on) { (void)on; }
+void he_stream_set(uint8_t on) { (void)on; }
 void he_stream_task(void) {}
 #else
 
@@ -28,16 +28,19 @@ void he_stream_task(void) {}
 #define HE_STREAM_REPORT_ID 0xF0
 #define HE_STREAM_REPORT_SIZE 32
 #define HE_STREAM_PAYLOAD (HE_STREAM_REPORT_SIZE - 3)
-#define HE_STREAM_INTERVAL_MS 8   // ~125 frames/s
+#define HE_STREAM_INTERVAL_MS 8      // ~125 frames/s
+#define HE_STREAM_INTERVAL_FAST_MS 4 // ~250 frames/s, when the host asks for it
 #define HE_STREAM_TIMEOUT_MS 1500 // stop this long after the last keepalive
 
 static bool     stream_on       = false;
 static uint32_t stream_deadline = 0;
 static uint32_t last_frame      = 0;
 static uint8_t  seq             = 0;
+static uint8_t  interval        = HE_STREAM_INTERVAL_MS;
 
-void he_stream_set(bool on) {
-    stream_on = on;
+void he_stream_set(uint8_t on) {
+    stream_on = on != 0;
+    interval  = on == 2 ? HE_STREAM_INTERVAL_FAST_MS : HE_STREAM_INTERVAL_MS;
     if (on) {
         stream_deadline = timer_read32() + HE_STREAM_TIMEOUT_MS;
     }
@@ -51,7 +54,7 @@ void he_stream_task(void) {
         stream_on = false; // host went away without saying stop
         return;
     }
-    if (he_is_suspended() || timer_elapsed32(last_frame) < HE_STREAM_INTERVAL_MS) {
+    if (he_is_suspended() || timer_elapsed32(last_frame) < interval) {
         return;
     }
     last_frame = timer_read32();

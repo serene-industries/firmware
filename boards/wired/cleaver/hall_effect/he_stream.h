@@ -5,10 +5,13 @@
 #pragma once
 
 #include <stdbool.h>
+#include <stdint.h>
 
 // VIA custom value id (channel 0) that starts/stops the stream. The host
 // repeats "on" as a keepalive; the stream stops by itself when it goes quiet.
 #define HE_STREAM_VALUE_ID 21
 
-void he_stream_set(bool on);
+// 0 stops it, 1 asks for 125 frames a second, 2 for 250 (each frame is three reports on an endpoint
+// that carries one a millisecond, so 250 leaves one slot in four for the configurator's commands).
+void he_stream_set(uint8_t on);
 void he_stream_task(void);

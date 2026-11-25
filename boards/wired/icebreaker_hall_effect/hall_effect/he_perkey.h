@@ -5,7 +5,8 @@
 // d[] below starts at the value id, i.e. d[0] is the id itself.
 //
 //   HE_VAL_INFO (22) get   -> d[1] protocol version, d[2] sensor count, d[3] rows, d[4] cols,
-//                              d[5] feature bits, d[6] key-cancel pairs the board holds
+//                              d[5] feature bits, d[6] key-cancel pairs the board holds,
+//                              d[7..8] scans per second as measured (high byte first)
 //   HE_VAL_KEY (23)  get   d[1] row, d[2] col -> d[3] 1 if a sensor sits there,
 //                              d[4] actuate, d[5] release, d[6] deadzone, d[7] down, d[8] up
 //                    set   d[1] row, d[2] col, d[3] actuate, d[4] release, d[5] deadzone,

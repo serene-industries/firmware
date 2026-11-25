@@ -25,7 +25,7 @@ flags = ['-fcommon', '-O1', '-Wall', '-Wno-unused-variable', '-Wno-unused-functi
          '-include', os.path.join(B, 'config.h'), '-include', os.path.join(B, 'keymaps/via/config.h'), '-I' + os.path.join(here, 'stubs'), '-I' + B]
 if uid:
     flags += ['-I' + os.path.join(here, 'stubs_uid'), '-DHOST_HAS_HARDWARE_ID']
-files = [os.path.join(here, 'harness.c'), gen] + [os.path.join(B, f) for f in ('he_switch_matrix.c', 'he_perkey.c', 'he_stream.c', 'keymaps/via/via_apc.c')]
+files = [os.path.join(here, 'harness.c'), gen] + [os.path.join(B, f) for f in ('he_switch_matrix.c', 'he_perkey.c', 'he_stream.c', 'he_synth.c', 'keymaps/via/via_apc.c')]
 r = subprocess.run(['gcc'] + flags + files + ['-lm', '-o', out], capture_output=True, text=True)
 sys.stderr.write(r.stderr)
 sys.exit(r.returncode)

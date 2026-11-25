@@ -16,6 +16,7 @@
 //keymap.c
 #include QMK_KEYBOARD_H
 #include "he_switch_matrix.h"
+#include "he_synth.h"
 #include "icebreaker_rgb.h"
 
 
@@ -31,6 +32,7 @@ enum custom_keycodes {
     DEBUG3,
     DEBUG4,
     DEBUG5,
+    SYNTH,   // QK_KB_9: the instrument mode on and off (he_synth.c)
 
 };
 
@@ -88,8 +90,19 @@ void start_mode_blink(uint8_t hue) {
 
 
 
+// The instrument mode changed (this key, or the configurator): blink, orange in, white out.
+void he_synth_changed(bool on) {
+    start_mode_blink(on ? 21 : 128);
+}
+
 bool process_record_user(uint16_t keycode, keyrecord_t *record) {
     switch (keycode) {
+        case SYNTH:
+            if (record->event.pressed) {
+                he_synth_toggle();
+            }
+            return false;
+
         case APCM:
             if (record->event.pressed) {
                 uprintf("[SYSTEM]: Actuation Point Control Mode set\n");

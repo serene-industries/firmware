@@ -13,11 +13,16 @@
 //   D               dump what the scan uses: per key "act rel dead down up floor ceiling", then mode, pairs, calibrating
 //   V <sensor>      print the travel the last scan saw for that key (0-100)
 //   L               print the EEPROM layout numbers
+//   KC <row> <col> <hex>  the base-layer keycode at that position (the instrument's notes follow it)
+//   E               print and forget the instrument's events ("E on|off|pr channel note value" each, then "E .")
+//   P <sensor> <permille>  hold that key at that many tenths of a percent of its travel
+//   X <scans> <ms>         that many scans, with that much time passing evenly over them
 #include "host.h"
 #undef printf
 #include "he_switch_matrix.h"
 #include "he_perkey.h"
 #include "he_stream.h"
+#include "he_synth.h"
 
 uint8_t  EE[4096];
 uint32_t host_now = 10000;
@@ -100,6 +105,12 @@ static uint16_t raw_for_pct(int s, int pct) {
     return (uint16_t)(ce > fl ? v + 0.999 : v - 0.999);
 }
 
+// The instrument: the keymap's keycodes and where its events go.
+static uint16_t host_kc[MATRIX_ROWS][MATRIX_COLS];
+uint16_t dynamic_keymap_get_keycode(uint8_t layer, uint8_t row, uint8_t col) { return layer == 0 && row < MATRIX_ROWS && col < MATRIX_COLS ? host_kc[row][col] : 0; }
+static uint8_t ev[512][4]; static int n_ev = 0;
+void he_synth_out(uint8_t kind, uint8_t channel, uint8_t note, uint8_t value) { if (n_ev < 512) { ev[n_ev][0] = kind; ev[n_ev][1] = channel; ev[n_ev][2] = note; ev[n_ev][3] = value; n_ev++; } }
+
 int main(int argc, char **argv) {
     const char *eefile = argc > 1 ? argv[1] : NULL;
     memset(EE, 0xFF, sizeof(EE));
@@ -138,6 +149,18 @@ int main(int argc, char **argv) {
             int s, v; if (sscanf(line + 4, "%d %d", &s, &v) == 2) host_adc[s] = (uint16_t)v;
         } else if (line[0] == 'N') {
             int n = atoi(line + 2); for (int i = 0; i < n; i++) he_matrix_scan();   // time passes only with T
+        } else if (!strncmp(line, "KC", 2)) {
+            int r, c; unsigned v; if (sscanf(line + 3, "%d %d %x", &r, &c, &v) == 3 && r < MATRIX_ROWS && c < MATRIX_COLS) host_kc[r][c] = (uint16_t)v;
+        } else if (line[0] == 'E') {
+            for (int i = 0; i < n_ev; i++) fprintf(stdout, "E %s %d %d %d\n", ev[i][0] == 1 ? "on" : ev[i][0] == 0 ? "off" : "pr", ev[i][1], ev[i][2], ev[i][3]);
+            fprintf(stdout, "E .\n"); n_ev = 0;
+        } else if (line[0] == 'P') {
+            int s, pm; if (sscanf(line + 2, "%d %d", &s, &pm) == 2) {
+                double fl = he_key_configs[s].noise_floor, ce = he_key_configs[s].noise_ceiling, v = fl + (ce - fl) * pm / 1000.0;
+                host_adc[s] = (uint16_t)(v + 0.5);
+            }
+        } else if (line[0] == 'X') {
+            int n, ms; if (sscanf(line + 2, "%d %d", &n, &ms) == 2) { uint32_t t0 = host_now; for (int i = 0; i < n; i++) { host_now = t0 + (uint32_t)((long long)ms * (i + 1) / n); he_matrix_scan(); } }
         } else if (line[0] == 'M') {
             fprintf(stdout, "M");
             for (int r = 0; r < MATRIX_ROWS; r++) fprintf(stdout, " %04x", (unsigned)matrix[r]);
