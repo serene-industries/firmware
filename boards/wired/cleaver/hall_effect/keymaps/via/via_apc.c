@@ -60,6 +60,7 @@ enum via_he_enums {
     id_he_key = HE_VAL_KEY,
     id_he_cancel_pair = HE_VAL_CANCEL,
     id_he_board_uid = HE_VAL_UID,
+    id_he_calibration = HE_VAL_CAL,
     // clang-format on
 };
 
@@ -111,7 +112,8 @@ void via_he_config_set_value(uint8_t *data) {
             break;
         }
         case id_he_key:
-        case id_he_cancel_pair: {
+        case id_he_cancel_pair:
+        case id_he_calibration: {
             he_perkey_set(data);
             return;
         }
@@ -180,9 +182,10 @@ void via_he_config_set_value(uint8_t *data) {
         }
         case id_start_calibration: { //when RGB is turned off, the calibration LEDS wont fire, maybe check and turn on, then return to rgb off on save
             print("[SYSTEM]: Calibration started, fully press each key on the board!\nBe sure to end the calibration in VIA with the button once you're done.\n");
+            he_cal_begin();   // remembers every bottom level, so a key that is not pressed keeps its own
             he_config.he_calibration_mode = true; // Enable calibration mode
             for (int i = 0; i < SENSOR_COUNT; i++) {
-                he_key_configs[i].noise_ceiling = 490; // refactorflag
+                he_key_configs[i].noise_ceiling = HE_CAL_START_CEILING;   // 490, as before
             }
             start_calibration_rgb(); // Add this line
             noise_ceiling_calibration();
@@ -191,6 +194,7 @@ void via_he_config_set_value(uint8_t *data) {
         }
 
         case id_save_calibration_data: {
+            he_cal_keep_untouched();   // keys that were not pressed keep the bottom level they had
             he_config.he_calibration_mode = false;
             for (int i = 0; i < SENSOR_COUNT; i++) {
                 eeprom_he_key_configs[i].noise_floor = he_key_configs[i].noise_floor;
@@ -269,6 +273,7 @@ void via_he_config_get_value(uint8_t *data) {
         case id_he_key:
         case id_he_cancel_pair:
         case id_he_board_uid:
+        case id_he_calibration:
             he_perkey_get(data);
             break;
         case id_via_he_actuation_threshold:

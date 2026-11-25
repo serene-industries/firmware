@@ -10,7 +10,7 @@
 //   RAW <sensor> <adc>  set the raw ADC value of a key
 //   N <scans>       run he_matrix_scan() that many times
 //   M               print the matrix rows ("M r0 r1 ...", hex)
-//   D               dump what the scan uses: per key "act rel dead down up floor ceiling", then mode and pair
+//   D               dump what the scan uses: per key "act rel dead down up floor ceiling", then mode, pairs, calibrating
 //   V <sensor>      print the travel the last scan saw for that key (0-100)
 //   L               print the EEPROM layout numbers
 #include "host.h"
@@ -148,7 +148,9 @@ int main(int argc, char **argv) {
                         he_key_configs[s].he_actuation_threshold, he_key_configs[s].he_release_threshold,
                         he_key_rapid_trigger_configs[s].deadzone, he_key_rapid_trigger_configs[s].engage_distance, he_key_rapid_trigger_configs[s].disengage_distance,
                         he_key_configs[s].noise_floor, he_key_configs[s].noise_ceiling);
-            fprintf(stdout, "MODE %d\nPAIR %d %d\n", he_config.he_actuation_mode, he_cancel_a, he_cancel_b);
+            fprintf(stdout, "MODE %d\n", he_config.he_actuation_mode);
+            for (int p = 0; p < HE_CANCEL_PAIRS; p++) fprintf(stdout, "PAIR %d %d %d\n", p, he_pairs[p].a, he_pairs[p].b);
+            fprintf(stdout, "CAL %d\n", he_config.he_calibration_mode ? 1 : 0);
         } else if (line[0] == 'V') {
             int s = atoi(line + 2);
             fprintf(stdout, "V %d %d\n", s, he_live_travel[sensor_to_matrix_map[s].row][sensor_to_matrix_map[s].col]);

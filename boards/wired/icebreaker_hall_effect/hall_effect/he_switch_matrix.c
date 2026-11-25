@@ -44,7 +44,6 @@ const sensor_to_matrix_map_t sensor_to_matrix_map[] = {
 
 
 // key cancellation stuff, implement xelus's pr(24k) whenever it hits master
-uint8_t latest_pressed = HE_NO_SENSOR;
 bool cancel_lock = false;
 
 matrix_row_t matrix_get_row(uint8_t row) {
@@ -164,6 +163,8 @@ void noise_ceiling_calibration(void) {
             sum += he_readkey_raw(i);
         }
         average_value = sum / NUM_READINGS;
+        // the stream keeps showing travel while calibrating, against the level stored before (sensor 68 is the encoder)
+        if (i != 68) he_live_travel[sensor_to_matrix_map[i].row][sensor_to_matrix_map[i].col] = he_cal_travel(i, average_value);
 
         // Update ceiling if the average reading is above the ceiling range
         if (average_value > ceiling_range) {
@@ -227,6 +228,8 @@ int he_init(he_key_config_t he_key_configs[], size_t count) {
     eeconfig_update_kb_datablock(&eeprom_he_config);
 
     //init RT stuff
+    #else
+    he_perkey_defaults();   // no VIA: the first key-cancel pair at its default
     #endif
     return 0;
 }
@@ -347,54 +350,44 @@ bool he_update_key_keycancel(matrix_row_t* current_matrix, uint8_t row, uint8_t 
     uint8_t rescaled_value = rescale(sensor_value, sensor_id);
     bool currently_pressed = rescaled_value > he_key_configs[sensor_id].he_actuation_threshold;
     bool should_release = rescaled_value < he_key_configs[sensor_id].he_release_threshold;
-    // The pair is he_cancel_a / he_cancel_b (he_perkey.c): A and D unless the user picked others.
+    // The key's pair, if it has one (he_perkey.c). Each pair remembers its own two keys, so several
+    // pairs work side by side and a key outside a pair pressed in between does not disturb it.
+    he_cancel_pair_t *pair = he_pair_for(sensor_id);
+    uint8_t other = pair ? (pair->a == sensor_id ? pair->b : pair->a) : HE_NO_SENSOR;
 
     // Handle key press
     if (currently_pressed && !previously_pressed) {
         if (++key_info->debounce_counter >= DEBOUNCE_THRESHOLD) {
-            // Update physical state tracking
-            if (sensor_id == he_cancel_a) he_cancel_a_down = true;
-            if (sensor_id == he_cancel_b) he_cancel_b_down = true;
-
-            // Special handling for A and D keys (sensor 32 and 34)
-            if (he_cancel_a != HE_NO_SENSOR && he_cancel_b != HE_NO_SENSOR &&
-                ((sensor_id == he_cancel_b && latest_pressed == he_cancel_a) ||
-                 (sensor_id == he_cancel_a && latest_pressed == he_cancel_b))) {
-                // Cancel the previous key
-                uint8_t prev_sensor = (sensor_id == he_cancel_b) ? he_cancel_a : he_cancel_b;
-                current_matrix[sensor_to_matrix_map[prev_sensor].row] &= ~(1UL << sensor_to_matrix_map[prev_sensor].col);
+            if (pair) {
+                if (pair->a == sensor_id) pair->a_down = true; else pair->b_down = true;
+                if (pair->latest == other) {
+                    // the other key of the pair is the one being reported: let it go
+                    current_matrix[sensor_to_matrix_map[other].row] &= ~(1UL << sensor_to_matrix_map[other].col);
+                }
+                pair->latest = sensor_id;
             }
-
-            // Press the current key
             key_info->debounced_state = true;
             current_matrix[row] |= (1UL << col);
             key_info->debounce_counter = 0;
-            latest_pressed = sensor_id;
             return true;
         }
     }
     // Handle key release
     else if (should_release && previously_pressed) {
-        // Update physical state tracking
-        if (sensor_id == he_cancel_a) he_cancel_a_down = false;
-        if (sensor_id == he_cancel_b) he_cancel_b_down = false;
-
         key_info->debounced_state = false;
         current_matrix[row] &= ~(1UL << col);
         key_info->debounce_counter = 0;
-
-        // If releasing the currently active key, check if we should restore the other key
-        if (latest_pressed == sensor_id) {
-            if (sensor_id == he_cancel_a && he_cancel_b_down) {
-                // If releasing A and D is still physically pressed, restore D
-                current_matrix[sensor_to_matrix_map[he_cancel_b].row] |= (1UL << sensor_to_matrix_map[he_cancel_b].col);
-                latest_pressed = he_cancel_b;
-            } else if (sensor_id == he_cancel_b && he_cancel_a_down) {
-                // If releasing D and A is still physically pressed, restore A
-                current_matrix[sensor_to_matrix_map[he_cancel_a].row] |= (1UL << sensor_to_matrix_map[he_cancel_a].col);
-                latest_pressed = he_cancel_a;
-            } else {
-                latest_pressed = HE_NO_SENSOR;
+        if (pair) {
+            if (pair->a == sensor_id) pair->a_down = false; else pair->b_down = false;
+            if (pair->latest == sensor_id) {
+                // the reported key lifted: if the other is still held it comes back
+                bool other_down = (pair->a == sensor_id) ? pair->b_down : pair->a_down;
+                if (other_down) {
+                    current_matrix[sensor_to_matrix_map[other].row] |= (1UL << sensor_to_matrix_map[other].col);
+                    pair->latest = other;
+                } else {
+                    pair->latest = HE_NO_SENSOR;
+                }
             }
         }
         return true;

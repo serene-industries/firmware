@@ -20,7 +20,7 @@ def check(name, cond, detail=''):
 class Out:
     def __init__(self, text):
         self.replies, self.matrices, self.keys, self.travel, self.warn = [], [], {}, {}, []
-        self.mode = self.pair = self.layout = None
+        self.mode = self.pair = self.layout = self.cal = None; self.pairs = {}
         for ln in text.splitlines():
             p = ln.split()
             if not p: continue
@@ -28,7 +28,10 @@ class Out:
             elif p[0] == 'M': self.matrices.append([int(x, 16) for x in p[1:]])
             elif p[0] == 'K': self.keys[int(p[1])] = dict(zip(('row', 'col', 'act', 'rel', 'dead', 'eng', 'lift', 'floor', 'ceil'), map(int, p[2:])))
             elif p[0] == 'MODE': self.mode = int(p[1])
-            elif p[0] == 'PAIR': self.pair = (int(p[1]), int(p[2]))
+            elif p[0] == 'PAIR':
+                self.pairs[int(p[1])] = (int(p[2]), int(p[3]))
+                if p[1] == '0': self.pair = (int(p[2]), int(p[3]))
+            elif p[0] == 'CAL': self.cal = int(p[1])
             elif p[0] == 'V': self.travel[int(p[1])] = int(p[2])
             elif p[0] == 'LAYOUT': self.layout = {p[i]: int(p[i + 1]) for i in range(1, len(p), 2)}
             elif p[0] == 'WARN': self.warn.append(ln)
@@ -71,7 +74,7 @@ def run_board(board, title):
     if b.returncode != 0:
         print(b.stderr[-2000:]); check('builds', False); return
     ee = os.path.join(tmp, board + '.ee')
-    W, A, Sk, D, F = (1, 2), (2, 1), (2, 2), (2, 3), (2, 4)
+    W, A, Sk, D, F, G = (1, 2), (2, 1), (2, 2), (2, 3), (2, 4), (2, 5)
 
     # ---- 1. a fresh board
     for fill in (0xFF, 0x00):
@@ -81,15 +84,15 @@ def run_board(board, title):
         check('no two keys share a mux channel', not o.warn, str(o.warn[:2]))
         info = o.replies[0]
         check('info: protocol, sensors, rows, cols', info[3:7] == [1, L['sensors'], L['rows'], L['cols']], str(info[:9]))
-        check('info: features per-key, pair, stored, id', info[7] == 0x0F and info[8] == 1, hex(info[7]))
+        check('info: features per-key, pairs, stored, id, calibration; 8 pairs', info[7] == 0x1F and info[8] == 8, '%s %s' % (hex(info[7]), info[8]))
         check('fresh key reads 50 30 15 10 10', o.replies[1][5:11] == [1, 50, 30, 15, 10, 10], str(o.replies[1][:11]))
         check('fresh pair is A and D', o.replies[2][4:9] == [1, 2, 1, 2, 3], str(o.replies[2][:9]))
         check('board id has 12 bytes', any(o.replies[3][3:15]) and not any(o.replies[3][15:]), str(o.replies[3][:16]))
         check('fresh mode is normal', o.replies[4][3] == 0 and o.mode == 0)
         check('fresh: every key 50/30, ceiling default', all(k['act'] == 50 and k['rel'] == 30 and k['ceil'] == L['ceiling'] for k in o.keys.values()))
-        check('kb block size is 7 + 3 per sensor', L['kbsize'] == 7 + 3 * L['sensors'])
+        check('kb block size is 5 + 2 per pair + 3 per sensor', L['kbsize'] == 5 + 2 * 8 + 3 * L['sensors'])
     sensor = {(k['row'], k['col']): s for s, k in o.keys.items()}
-    sW, sA, sS, sD, sF = (sensor[x] for x in (W, A, Sk, D, F))
+    sW, sA, sS, sD, sF, sG = (sensor[x] for x in (W, A, Sk, D, F, G))
     def bit(m, pos): return (m[pos[0]] >> pos[1]) & 1
     empty = next((r, c) for r in range(L['rows'] - 1, -1, -1) for c in range(L['cols'] - 1, -1, -1) if (r, c) not in sensor)
 
@@ -118,21 +121,29 @@ def run_board(board, title):
     check('a position with no sensor says so', r[13][5] == 0 and r[15][5] == 0, str(r[13][:8]))
     check('nothing else moved', all((k['act'], k['rel']) == (50, 30) for s, k in o.keys.items() if s != sW))
 
-    # ---- 4. the key-cancel pair
+    # ---- 4. the key-cancel pairs: eight slots, a key in one pair only
+    NONE = [0xFF] * 4
+    def pget(i): return S(GET, 0, 24, i)
+    def pset(i, a, b): return S(SET, 0, 24, i, *(a or (0xFF, 0xFF)), *(b or (0xFF, 0xFF)))
     fresh(ee)
-    o = boot(binary, ee, [S(SET, 0, 24, 0, *W, *Sk), S(GET, 0, 24, 0), S(SET, 0, 24, 0, *A, 0xFF, 0xFF), S(GET, 0, 24, 0), S(SET, 0, 24, 0, *A, *A), S(GET, 0, 24, 0),
-                          S(SET, 0, 24, 0, *empty, *A), S(GET, 0, 24, 0), S(GET, 0, 24, 1), S(SET, 0, 24, 1, *A, *D), S(GET, 0, 24, 0), 'T 2500'])
+    o = boot(binary, ee, [pset(0, W, Sk), pget(0), pset(0, A, None), pget(0), pset(0, A, A), pget(0), pset(0, empty, A), pget(0),
+                          pget(8), pset(8, A, D), pget(7),
+                          pset(1, A, D), pget(1), pget(0), pset(2, W, F), pget(2), pset(1, Sk, D), pget(1), pset(1, D, A), pget(1), 'T 2500'])
     r = o.replies
-    check('pair W + S reads back', r[1][4:9] == [1, *W, *Sk], str(r[1][:9]))
+    check('pair 0 = W + S reads back', r[1][4:9] == [1, *W, *Sk], str(r[1][:9]))
     check('half a pair refused', r[3][5:9] == [*W, *Sk])
     check('a key with itself refused', r[5][5:9] == [*W, *Sk])
     check('a position with no key refused', r[7][5:9] == [*W, *Sk])
-    check('pair index 1 does not exist', r[8][4] == 0 and r[10][5:9] == [*W, *Sk])
-    o = boot(binary, ee, [S(GET, 0, 24, 0), 'D', S(SET, 0, 24, 0, 0xFF, 0xFF, 0xFF, 0xFF), S(GET, 0, 24, 0), 'T 2500'])
-    check('pair W + S after a power cycle', o.replies[0][5:9] == [*W, *Sk] and o.pair == (sW, sS), str(o.pair))
-    check('no pair accepted', o.replies[2][4:9] == [1, 0xFF, 0xFF, 0xFF, 0xFF])
-    o = boot(binary, ee, [S(GET, 0, 24, 0), 'D'])
-    check('no pair after a power cycle', o.replies[0][5:9] == [0xFF] * 4 and o.pair == (0xFF, 0xFF), str(o.pair))
+    check('there is no ninth pair', r[8][4] == 0 and r[10][4:9] == [1, *NONE], str(r[10][:9]))
+    check('a second pair A + D beside the first', r[12][4:9] == [1, *A, *D] and r[13][5:9] == [*W, *Sk], str(r[12][:9]))
+    check('a key already in a pair is refused for another', r[15][5:9] == NONE and r[17][5:9] == [*A, *D], '%s %s' % (r[15][:9], r[17][:9]))
+    check('a pair can be rewritten in its own slot', r[19][5:9] == [*D, *A], str(r[19][:9]))
+    o = boot(binary, ee, [pget(0), pget(1), 'D', pset(0, None, None), pget(0), pget(1), pset(2, W, F), pget(2), 'T 2500'])
+    check('both pairs after a power cycle', o.replies[0][5:9] == [*W, *Sk] and o.replies[1][5:9] == [*D, *A] and o.pairs[0] == (sW, sS) and o.pairs[1] == (sD, sA), str(o.pairs))
+    check('an emptied slot frees its keys for another pair', o.replies[3][4:9] == [1, *NONE] and o.replies[4][5:9] == [*D, *A] and o.replies[6][5:9] == [*W, *F], str(o.replies[6][:9]))
+    o = boot(binary, ee, [pget(0), pget(1), pget(2), 'D'])
+    check('empty slot and the others after a power cycle', o.replies[0][5:9] == NONE and o.replies[1][5:9] == [*D, *A] and o.replies[2][5:9] == [*W, *F] and o.pairs[0] == (0xFF, 0xFF), str(o.pairs))
+    pair_none = S(SET, 0, 24, 0, 0xFF, 0xFF, 0xFF, 0xFF)
 
     # ---- 5. key cancel in the scan, with the pair the user chose
     def cancel_run(pre):
@@ -150,9 +161,23 @@ def run_board(board, title):
     check('default pair: W and S do not cancel', bit(m[1], W) == 1 and bit(m[1], Sk) == 1)
     check('default pair: D pressed, A let go', bit(m[5], A) == 0 and bit(m[5], D) == 1, str(m[5]))
     check('default pair: D lifted, A comes back', bit(m[6], A) == 1 and bit(m[6], D) == 0)
-    m = cancel_run([S(SET, 0, 24, 0, 0xFF, 0xFF, 0xFF, 0xFF)])
+    m = cancel_run([pair_none])
     check('no pair: nothing cancels', bit(m[1], W) == 1 and bit(m[1], Sk) == 1 and bit(m[5], A) == 1 and bit(m[5], D) == 1)
     check('no pair: releases still work', m[3] == [0] * L['rows'] and m[7] == [0] * L['rows'])
+
+    fresh(ee)
+    def held(*sensors): return ['A -1 0'] + ['A %d 100' % x for x in sensors] + ['N 8', 'M']
+    o = boot(binary, ee, [pset(1, W, Sk), S(SET, 0, 6, 2), *held(sA), *held(sA, sW), *held(sA, sW, sD), *held(sA, sW, sD, sS), *held(sA, sW, sS), *held(sA, sW), *held(),
+                          *held(sA), *held(sA, sF), *held(sA, sF, sD), *held(sA, sF), *held()])
+    m = o.matrices
+    def downs(mm, *pos): return sorted((r, c) for r in range(L['rows']) for c in range(L['cols']) if (mm[r] >> c) & 1) == sorted(pos)
+    check('two pairs: A, then W: both down', downs(m[1], A, W), str(m[1]))
+    check('two pairs: D pressed lets A go, W stays', downs(m[2], D, W), str(m[2]))
+    check('two pairs: S pressed lets W go', downs(m[3], D, Sk), str(m[3]))
+    check('two pairs: D lifted, A comes back; S still wins over W', downs(m[4], A, Sk), str(m[4]))
+    check('two pairs: S lifted, W comes back', downs(m[5], A, W), str(m[5]))
+    check('two pairs: all up', downs(m[6]))
+    check('a key outside the pair pressed in between does not disturb it', downs(m[8], A, F) and downs(m[9], F, D) and downs(m[10], A, F) and downs(m[11]), str(m[9]))
 
     # ---- 6. per-key levels in the scan, normal mode and rapid trigger
     fresh(ee)
@@ -199,7 +224,7 @@ def run_board(board, title):
     check('carried: calibration of every key', all(o.keys[i]['ceil'] == ceil[i] for i in range(L['sensors'])), '%s vs %s' % (o.keys[3]['ceil'], ceil[3]))
     check('carried: starts in normal, pair A and D', o.mode == 0 and o.replies[0][5:9] == [2, 1, 2, 3])
     img = open(ee, 'rb').read()
-    check('carried: keyboard block rewritten in the new layout', struct.unpack_from('<I', img, L['kbdword'])[0] == L['kbsize'] and img[L['base'] + 3:L['base'] + 5] == bytes([0x48, 0xE1]))
+    check('carried: keyboard block rewritten in the new layout', struct.unpack_from('<I', img, L['kbdword'])[0] == L['kbsize'] and img[L['base'] + 3:L['base'] + 5] == bytes([0x48, 0xE2]))
     o2 = boot(binary, ee, ['D'])
     check('carried: the same after the next power cycle', all(o2.keys[i]['ceil'] == ceil[i] and o2.keys[i]['act'] == 44 for i in range(L['sensors'])))
     old_image(ee, L, post_flash=0, falling=falling)
@@ -219,6 +244,40 @@ def run_board(board, title):
         fresh(ee)
         o3 = boot(binary, ee, ['RAW %d 660' % sF, 'N 2', 'V %d' % sF])
         check('before calibration that press reads 75 %', o3.travel[sF] == 75, str(o3.travel))
+
+    # ---- 9b. calibration as the configurator can see it: which keys moved, one key back, leave, keys not pressed keep theirs
+    def cstate(): return S(GET, 0, 26, 0)
+    def ckey(pos): return S(GET, 0, 26, 1, *pos)
+    def moved_keys(r): return sorted((row, c) for row in range(L['rows']) for c in range(16) if ((r[5 + 2 * row] | (r[6 + 2 * row] << 8)) >> c) & 1)
+    def u16(r, i): return (r[i] << 8) | r[i + 1]
+    bF = L['floor'] + (150 if not falling else -300); bG = L['floor'] + (130 if not falling else -260)
+    ceil = old_image(ee, L, falling=falling)       # a board that has a calibration already
+    o = boot(binary, ee, [cstate(), ckey(F), S(SET, 0, 4), cstate(), 'RAW %d %d' % (sF, bF), 'N 6', 'V %d' % sF, cstate(), ckey(F), ckey(A),
+                          'RAW %d %d' % (sG, bG), 'N 6', cstate(), S(SET, 0, 26, 1, *G), cstate(), ckey(G),
+                          'RAW %d %d' % (sF, L['floor']), 'RAW %d %d' % (sG, L['floor']), 'N 6', cstate(), S(SET, 0, 5), cstate(), 'D'])
+    r = o.replies
+    check('calibration: off at first, nothing moved', r[0][4] == 0 and moved_keys(r[0]) == [], str(r[0][:16]))
+    check('calibration: a key reports rest, bottom and stored bottom', r[1][6] == 1 and u16(r[1], 7) == L['floor'] and u16(r[1], 9) == ceil[sF] and u16(r[1], 11) == ceil[sF] and r[1][13] == 0, str(r[1][:14]))
+    check('calibration: started, still nothing moved', r[3][4] == 1 and moved_keys(r[3]) == [], str(r[3][:16]))
+    want_t = abs(bF - L['floor']) * 100 // abs(ceil[sF] - L['floor'])
+    check('calibration: travel is shown against the stored level meanwhile', o.travel[sF] == min(100, want_t), '%s want %s' % (o.travel, want_t))
+    check('calibration: F pressed, F moved', moved_keys(r[4]) == [F], str(moved_keys(r[4])))
+    check('calibration: F has its new bottom, the stored one is still known', u16(r[5], 9) == bF and u16(r[5], 11) == ceil[sF] and r[5][13] == 1, str(r[5][:14]))
+    check('calibration: a key not pressed says so', r[6][13] == 0 and u16(r[6], 11) == ceil[sA], str(r[6][:14]))
+    check('calibration: two keys moved', moved_keys(r[7]) == sorted([F, G]), str(moved_keys(r[7])))
+    check('calibration: one key put back', moved_keys(r[9]) == [F] and r[10][13] == 0 and u16(r[10], 11) == ceil[sG], str(r[10][:14]))
+    check('calibration: letting go does not move the bottom', moved_keys(r[11]) == [F])
+    check('calibration: saved, mode off', r[13][4] == 0 and o.cal == 0)
+    check('calibration: the pressed key has its new bottom', o.keys[sF]['ceil'] == bF, str(o.keys[sF]))
+    check('calibration: keys not pressed keep the bottom they had', all(o.keys[i]['ceil'] == ceil[i] for i in range(L['sensors']) if i != sF), str(o.keys[sG]))
+    o = boot(binary, ee, ['D', 'RAW %d %d' % (sF, bF), 'N 2', 'V %d' % sF])
+    check('calibration: kept over a power cycle, and the same press now reads 100', o.keys[sF]['ceil'] == bF and o.keys[sG]['ceil'] == ceil[sG] and o.travel[sF] == 100, '%s %s' % (o.keys[sF], o.travel))
+    o = boot(binary, ee, [S(SET, 0, 4), 'RAW %d %d' % (sG, bG), 'N 6', cstate(), S(SET, 0, 26, 0), cstate(), 'D', S(SET, 0, 26, 0), S(SET, 0, 5), 'D'])
+    check('calibration: left without saving, nothing kept', moved_keys(o.replies[1]) == [G] and o.replies[3][4] == 0 and o.cal == 0 and o.keys[sG]['ceil'] == ceil[sG] and o.keys[sF]['ceil'] == bF, str(o.keys[sG]))
+    o = boot(binary, ee, ['D'])
+    check('calibration: and nothing stored by leaving', o.keys[sG]['ceil'] == ceil[sG] and o.keys[sF]['ceil'] == bF)
+    o = boot(binary, ee, [S(SET, 0, 4), 'N 6', S(SET, 0, 5), 'D'])
+    check('calibration: started and saved with no key pressed changes nothing', all(o.keys[i]['ceil'] == (bF if i == sF else ceil[i]) for i in range(L['sensors'])), str(o.keys[0]))
 
     # ---- 10. the configurator's emulated board answers every packet as the firmware does
     for seed in (range(int(os.environ.get('SEEDS', '3'))) if emu else []):

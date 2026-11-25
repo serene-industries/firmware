@@ -16,8 +16,9 @@ on the Icebreaker HE and the Cleaver HE:
 
 - a fresh board; one key's levels (set, read back, used by the scan at once,
   kept over a power cycle); what the firmware refuses or clamps;
-- the key-cancel pair (set, refused cases, kept, none) and key cancel in the
-  scan with the chosen pair, the default pair and no pair;
+- the key-cancel pairs (eight slots, refused cases, a key in one pair only,
+  kept, emptied) and key cancel in the scan: a chosen pair, the default
+  pair, no pair, two pairs side by side, a key outside the pair in between;
 - per-key levels in the scan in normal mode and in rapid trigger;
 - the all-keys commands (they land 2 s later and override per-key values);
   mode and rapid-trigger numbers kept over a power cycle;
@@ -25,6 +26,8 @@ on the Icebreaker HE and the Cleaver HE:
   calibration are carried over (`he_perkey_carry_over`);
 - calibration: a press that bottoms out under the default ceiling reads under
   100 % until the board is calibrated.
+- calibration as the configurator sees it: which keys moved, one key back,
+  leaving without saving, keys not pressed keeping what they had.
 
 To also compare every reply with the configurator's emulated board (the one
 its protocol tests run against), bundle its driver and pass it:
