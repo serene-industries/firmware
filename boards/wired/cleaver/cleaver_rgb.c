@@ -157,16 +157,13 @@ void start_calibration_rgb(void) {
     calibration_changes_pending = false;  // 
 }
 
-void update_calibration_rgb(uint8_t sensor_id, uint16_t ceiling) {
+void update_calibration_rgb(uint8_t sensor_id, uint16_t done) {
     uint8_t new_state;
 
-    if (ceiling <= CEILING_GOOD) {
-        new_state = LED_STATE_CALIBRATED;   // small = good
-    } else if (ceiling <= CEILING_MEDIUM) {
-        new_state = LED_STATE_PARTIAL;      // mid = warning
-    } else {
-        new_state = LED_STATE_UNCALIBRATED; // high = bad
-    }
+    // Two states: red until the press has bottomed out (he_cal_note in he_perkey.c), then green.
+    // There is no in-between: a fixed sensor level cannot say how far a given switch travels, and
+    // a key that had bottomed out below that level used to stay yellow.
+    new_state = done ? LED_STATE_CALIBRATED : LED_STATE_UNCALIBRATED;
 
     if (calibration_leds[sensor_id].state != new_state) {
         calibration_leds[sensor_id].state = new_state;

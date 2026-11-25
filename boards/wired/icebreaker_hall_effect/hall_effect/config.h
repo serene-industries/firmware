@@ -50,7 +50,15 @@
     { B3, B4, B6, B5 }
 
 #define ANALOG_PORT A3
-#define EECONFIG_KB_DATA_SIZE 3 //
+// Key-cancel pairs the board holds (two bytes each in the keyboard-level block)
+#define HE_CANCEL_PAIRS 8
+// mode block (3) + layout mark (2) + key-cancel pairs (2 each) + rapid-trigger numbers (3 per sensor)
+#define EECONFIG_KB_DATA_SIZE (5 + 2 * HE_CANCEL_PAIRS + 3 * SENSOR_COUNT)
+// Where every key's bottom level is put when a calibration starts; a key still there has not been pressed
+#define HE_CAL_START_CEILING 570
+// The first pair defaults to A and D (sensor ids from sensor_to_matrix_map)
+#define HE_DEFAULT_CANCEL_A 32
+#define HE_DEFAULT_CANCEL_B 34
 #define WEAR_LEVELING_LOGICAL_SIZE 2048
 #define WEAR_LEVELING_BACKING_SIZE 16384
 

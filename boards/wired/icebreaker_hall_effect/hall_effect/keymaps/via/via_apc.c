@@ -17,6 +17,7 @@
 //keyboards/icebreaker/keymaps/via/via_apc.c
 #include "he_switch_matrix.h"
 #include "he_stream.h"
+#include "he_perkey.h"
 #include "action.h"
 #include "via.h"
 #include "config.h"
@@ -63,6 +64,12 @@ enum via_he_enums {
     id_set_rapid_trigger_disengage_distance = 9,
     // Write-only: 1 starts (and keeps alive) the travel stream, 0 stops it.
     id_set_live_stream = HE_STREAM_VALUE_ID,
+    // One key's levels, the key-cancel pair, the board ID, what this firmware supports: he_perkey.h
+    id_he_info = HE_VAL_INFO,
+    id_he_key = HE_VAL_KEY,
+    id_he_cancel_pair = HE_VAL_CANCEL,
+    id_he_board_uid = HE_VAL_UID,
+    id_he_calibration = HE_VAL_CAL,
     // clang-format on
 };
 
@@ -95,6 +102,12 @@ void via_he_config_set_value(uint8_t *data) {
         case id_set_live_stream: {
             he_stream_set(value_data != 0);
             break;
+        }
+        case id_he_key:
+        case id_he_cancel_pair:
+        case id_he_calibration: {
+            he_perkey_set(data);
+            return;
         }
         case id_via_he_actuation_threshold: {
             if (value_data >= 10 && value_data <= 90) {
@@ -161,9 +174,10 @@ void via_he_config_set_value(uint8_t *data) {
         }
         case id_start_calibration: { //when RGB is turned off, the calibration LEDS wont fire, maybe check and turn on, then return to rgb off on save
             print("[SYSTEM]: Calibration started, fully press each key on the board!\nBe sure to end the calibration in VIA with the button once you're done.\n");
+            he_cal_begin();   // remembers every bottom level, so a key that is not pressed keeps its own
             he_config.he_calibration_mode = true; // Enable calibration mode
             for (int i = 0; i < SENSOR_COUNT; i++) {
-                he_key_configs[i].noise_ceiling = 570;
+                he_key_configs[i].noise_ceiling = HE_CAL_START_CEILING;   // 570, as before
             }
             start_calibration_rgb(); // Add this line
             noise_ceiling_calibration();
@@ -172,6 +186,7 @@ void via_he_config_set_value(uint8_t *data) {
         }
 
         case id_save_calibration_data: {
+            he_cal_keep_untouched();   // keys that were not pressed keep the bottom level they had
             he_config.he_calibration_mode = false;
             for (int i = 0; i < SENSOR_COUNT; i++) {
                 eeprom_he_key_configs[i].noise_floor = he_key_configs[i].noise_floor;
@@ -186,14 +201,17 @@ void via_he_config_set_value(uint8_t *data) {
         }
         case id_toggle_actuation_mode: {
             he_config.he_actuation_mode = value_data;
+            he_perkey_mark_dirty();   // the mode now survives a power cycle
             uprintf("[SYSTEM]: Actuation mode toggled! mode: %d\n", he_config.he_actuation_mode);
             break;
         }
         case id_set_rapid_trigger_deadzone: {
+            if (value_data < HE_MIN_DEADZONE) value_data = HE_MIN_DEADZONE;   // lower, and released keys stay down (he_perkey.h)
             for (int i = 0; i < SENSOR_COUNT; i++) {
                 he_key_rapid_trigger_configs[i].deadzone = value_data;
                 eeconfig_update_user_datablock(&eeprom_he_key_configs);
             }
+            he_perkey_mark_dirty();   // rapid-trigger numbers are stored now
             last_moved_slider = SLIDER_TYPE_RTP_DEADZONE;
             current_slider_type = SLIDER_TYPE_RTP_DEADZONE;
             slider_active = true;
@@ -207,6 +225,7 @@ void via_he_config_set_value(uint8_t *data) {
             for (int i = 0; i < SENSOR_COUNT; i++) {
                 he_key_rapid_trigger_configs[i].engage_distance = value_data;
             }
+            he_perkey_mark_dirty();   // rapid-trigger numbers are stored now
             last_moved_slider = SLIDER_TYPE_RTP_ENGAGE;
             current_slider_type = SLIDER_TYPE_RTP_ENGAGE;
             slider_active = true;
@@ -220,6 +239,7 @@ void via_he_config_set_value(uint8_t *data) {
             for (int i = 0; i < SENSOR_COUNT; i++) {
                 he_key_rapid_trigger_configs[i].disengage_distance = value_data;
             }
+            he_perkey_mark_dirty();   // rapid-trigger numbers are stored now
             last_moved_slider = SLIDER_TYPE_RTP_DISENGAGE;
             current_slider_type = SLIDER_TYPE_RTP_DISENGAGE;
             slider_active = true;
@@ -241,6 +261,13 @@ void via_he_config_get_value(uint8_t *data) {
     uprintf("[SYSTEM]: Getting config value. ID: %d\n", value_id);
 
     switch (value_id) {
+        case id_he_info:
+        case id_he_key:
+        case id_he_cancel_pair:
+        case id_he_board_uid:
+        case id_he_calibration:
+            he_perkey_get(data);
+            break;
         case id_via_he_actuation_threshold:
             *value_data = he_key_configs[0].he_actuation_threshold;
             uprintf("via_he_config_get_value with (%d) id_via_he_actuation_threshold\n", *value_data);

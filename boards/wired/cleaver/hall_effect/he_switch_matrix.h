@@ -59,6 +59,9 @@ typedef struct {
     bool    he_calibration_mode;
     bool    he_post_flash;
     uint8_t he_actuation_mode;
+    uint8_t layout_magic[2];        // says the fields below are present (he_perkey.c)
+    uint8_t cancel_pairs[HE_CANCEL_PAIRS][2];   // key-cancel pairs as sensor ids, 0xFF 0xFF = empty slot
+    uint8_t rt[SENSOR_COUNT][3];    // per key: deadzone, down to fire, up to let go
 } eeprom_he_config_t;
 
 //redundancy to decouple VIA I/O from runtime/EEPROM
