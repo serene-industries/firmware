@@ -103,7 +103,7 @@ bool he_perkey_carry_over(void) {
 
 void he_perkey_load(void) {
     for (int i = 0; i < SENSOR_COUNT; i++) {
-        he_key_rapid_trigger_configs[i].deadzone           = clampu8(eeprom_he_config.rt[i][0], 5, 60);
+        he_key_rapid_trigger_configs[i].deadzone           = clampu8(eeprom_he_config.rt[i][0], HE_MIN_DEADZONE, HE_MAX_DEADZONE);
         he_key_rapid_trigger_configs[i].engage_distance    = clampu8(eeprom_he_config.rt[i][1], 2, 50);
         he_key_rapid_trigger_configs[i].disengage_distance = clampu8(eeprom_he_config.rt[i][2], 2, 50);
         he_key_rapid_trigger_configs[i].boundary_value     = he_key_rapid_trigger_configs[i].deadzone;
@@ -209,7 +209,7 @@ void he_perkey_set(uint8_t *d) {
                 eeprom_save_timer   = timer_read();   // the keymap's housekeeping writes the per-key block
                 eeprom_save_pending = true;
             }
-            if (d[5] != 0xFF) he_key_rapid_trigger_configs[s].deadzone = clampu8(d[5], 5, 60);
+            if (d[5] != 0xFF) he_key_rapid_trigger_configs[s].deadzone = clampu8(d[5], HE_MIN_DEADZONE, HE_MAX_DEADZONE);
             if (d[6] != 0xFF) he_key_rapid_trigger_configs[s].engage_distance = clampu8(d[6], 2, 50);
             if (d[7] != 0xFF) he_key_rapid_trigger_configs[s].disengage_distance = clampu8(d[7], 2, 50);
             if (d[5] != 0xFF || d[6] != 0xFF || d[7] != 0xFF) he_perkey_mark_dirty();

@@ -9,7 +9,8 @@
 //   HE_VAL_KEY (23)  get   d[1] row, d[2] col -> d[3] 1 if a sensor sits there,
 //                              d[4] actuate, d[5] release, d[6] deadzone, d[7] down, d[8] up
 //                    set   d[1] row, d[2] col, d[3] actuate, d[4] release, d[5] deadzone,
-//                              d[6] down, d[7] up   (0xFF leaves a value as it is)
+//                              d[6] down, d[7] up   (0xFF leaves a value as it is;
+//                              deadzone is kept within 15 to 60, down and up within 2 to 50)
 //   HE_VAL_CANCEL (24) get d[1] pair index (0) -> d[2] 1 if valid, d[3] row A, d[4] col A,
 //                              d[5] row B, d[6] col B   (0xFF 0xFF = no key)
 //                      set d[1] pair index (0), d[2] row A, d[3] col A, d[4] row B, d[5] col B
@@ -33,6 +34,12 @@
 #define HE_FEATURE_PERSISTED   0x08   // mode, rapid-trigger numbers and the pair survive a power cycle
 
 #define HE_NO_SENSOR 0xFF
+
+// Rapid-trigger deadzone limits. The floor is a safety limit: the scan lets a key go only once it is
+// back at deadzone minus 8 (he_update_key_rapid_trigger), so a deadzone near the rest level leaves the
+// key held down after it is released. 15 is also the lowest value the configurator's slider offers.
+#define HE_MIN_DEADZONE 15
+#define HE_MAX_DEADZONE 60
 
 // The key-cancel pair as sensor ids (HE_NO_SENSOR = none). Read by the scan.
 extern uint8_t he_cancel_a;

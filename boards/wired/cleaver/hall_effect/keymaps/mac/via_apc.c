@@ -190,6 +190,7 @@ void via_he_config_set_value(uint8_t *data) {
             break;
         }
         case id_set_rapid_trigger_deadzone: {
+            if (value_data < HE_MIN_DEADZONE) value_data = HE_MIN_DEADZONE;   // lower, and released keys stay down (he_perkey.h)
             for (int i = 0; i < SENSOR_COUNT; i++) {
                 he_key_rapid_trigger_configs[i].deadzone = value_data;
                 eeconfig_update_user_datablock(&eeprom_he_key_configs);

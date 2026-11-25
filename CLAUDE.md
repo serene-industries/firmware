@@ -62,6 +62,12 @@
   written. Without it the longer keyboard block makes the core report both
   blocks invalid and the board starts from defaults, calibration included.
   The keymap and macros are still erased by a flash from another day.
+- **Rapid-trigger deadzone is kept at 15 or more** (`HE_MIN_DEADZONE`, both the
+  all-keys command and the per-key one). The scan lets a key go only once it
+  is back at deadzone minus 8; with a deadzone near the rest level a released
+  key stays down. The host tests show it. Released firmware (Icebreaker HE
+  1.0.4, Cleaver HE 0.4.2.14) takes any value from the all-keys command: the
+  configurator's slider and the visualizer both stop at 15.
 - `tests/host/` runs the boards' real source on a computer (`python3
   tests/host/run.py`, also a workflow on every push that touches the HE
   boards): VIA packets in, replies out, keys held through a stand-in ADC, the

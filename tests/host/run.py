@@ -114,7 +114,7 @@ def run_board(board, title):
     check('actuate 95 refused', r[5][6:8] == [50, 30])
     check('0xFF leaves actuate, release 20 taken', r[7][6:8] == [50, 20], str(r[7][:11]))
     check('rapid-trigger numbers clamped 60 / 2 / 50', r[9][8:11] == [60, 2, 50], str(r[9][:11]))
-    check('deadzone 1 clamped to 5, others left', r[11][8:11] == [5, 2, 50], str(r[11][:11]))
+    check('deadzone 1 raised to 15, others left', r[11][8:11] == [15, 2, 50], str(r[11][:11]))
     check('a position with no sensor says so', r[13][5] == 0 and r[15][5] == 0, str(r[13][:8]))
     check('nothing else moved', all((k['act'], k['rel']) == (50, 30) for s, k in o.keys.items() if s != sW))
 
@@ -169,6 +169,14 @@ def run_board(board, title):
     check('rapid trigger: at 28 % every key but W (deadzone 30) is down', others_down and bit(m[0], W) == 0, str(m[0]))
     check('rapid trigger: at 45 % W is down too', bit(m[1], W) == 1)
     check('rapid trigger: all up at rest', m[2] == [0] * L['rows'], str(m[2]))
+
+    # ---- 6b. rapid trigger lets a key go at deadzone minus 8, so the firmware keeps the deadzone at 15 or more
+    for rest in (0, 3, 6):
+        fresh(ee)
+        o = boot(binary, ee, [S(SET, 0, 6, 1), kset(*W, 0xFF, 0xFF, 5), S(SET, 0, 7, 5), S(GET, 0, 7), kget(*W),
+                              'A -1 %d' % rest, 'N 8', 'A -1 80', 'N 8', 'M', 'A -1 %d' % rest, 'N 12', 'M'])
+        check('a deadzone of 5 is stored as 15 (all keys and one key)', o.replies[3][3:5] == [0, 15] and o.replies[4][8] == 15, str(o.replies[4][:11]))
+        check('rapid trigger at rest level %d: every key comes back up' % rest, any(o.matrices[0]) and o.matrices[1] == [0] * L['rows'], str(o.matrices[1]))
 
     # ---- 7. the all-keys commands still work, and land 2 s later
     fresh(ee)
