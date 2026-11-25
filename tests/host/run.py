@@ -311,9 +311,15 @@ def run_board(board, title):
         def byte(): return rng.choice([0, 1, 2, 5, 9, 10, 11, 12, 20, 22, 26, 30, 44, 50, 51, 60, 89, 90, 91, 120, 200, 254, 255])
         lo, hi = (L['floor'] - 40, L['floor'] + 220) if not falling else (0, L['floor'] + 50)
         real = [i for i in range(L['sensors']) if not (enc and i == 68)]
+        # the base-layer keycodes, the same on both sides: the instrument's notes follow them
+        for (r_, c_) in spots: script.append(('KC', [r_, c_, 4 + ((r_ * L['cols'] + c_) % 26)]))
         for _ in range(1500):
             x = rng.random()
             pos = rng.choice(spots) if rng.random() < 0.9 else empty
+            if rng.random() < 0.07:   # the instrument: the mode, its settings, its read-back
+                y = rng.random()
+                script.append(('S', [SET, 0, 27, 0, rng.choice([0, 1, 1])] if y < 0.4 else [GET, 0, 27, 0] if y < 0.8 else [SET, 0, 27, 1, byte(), byte(), byte(), byte(), rng.choice([0, 1, 2, 3, 4, 9, 255]), byte()]))
+                continue
             if x < 0.08: script.append(('S', [SET, 0, 1, byte()]))
             elif x < 0.16: script.append(('S', [SET, 0, 2, byte()]))
             elif x < 0.18: script.append(('S', [SET, 0, 3]))
@@ -339,16 +345,19 @@ def run_board(board, title):
             elif x < 0.92: script.append(('N', rng.randint(1, 6)))
             elif x < 0.95: script.append(('V', rng.choice(real[:10] if rng.random() < 0.6 else real)))
             else: script.append(('T', rng.choice([100, 400, 900, 1500, 1990, 2010, 2500, 4000])))
+        script.append(('E', 0))
         fresh(ee)
-        line = {'S': lambda a: 'S ' + ' '.join('%02x' % b for b in a), 'T': lambda a: 'T %d' % a, 'RAW': lambda a: 'RAW %d %d' % tuple(a), 'N': lambda a: 'N %d' % a, 'V': lambda a: 'V %d' % a}
+        line = {'KC': lambda a: 'KC %d %d %x' % tuple(a), 'E': lambda a: 'E', 'S': lambda a: 'S ' + ' '.join('%02x' % b for b in a), 'T': lambda a: 'T %d' % a, 'RAW': lambda a: 'RAW %d %d' % tuple(a), 'N': lambda a: 'N %d' % a, 'V': lambda a: 'V %d' % a}
         fwo = boot(binary, ee, [line[op](a) for op, a in script]); fw = fwo.replies
         opts = dict(name=title, vendorId=0x5363, productId=0x0010, rows=L['rows'], cols=L['cols'], sensors=[[o.keys[i]['row'], o.keys[i]['col']] for i in range(L['sensors'])],
-                    defaultPair=[sA, sD], rest=L['floor'], bottom=L['ceiling'], calStart=L['calstart'], alias=({'68': 18} if enc else {}), noTravel=([68] if enc else []), perKey=True, uid=[0x44, 0x33, 0x22, 0x11, 0x88, 0x77, 0x66, 0x55, 0xCC, 0xBB, 0xAA, 0x99], version=[1, 0, 5, 0])
+                    defaultPair=[sA, sD], rest=L['floor'], bottom=L['ceiling'], calStart=L['calstart'], alias=({'68': 18} if enc else {}), noTravel=([68] if enc else []), synth=True, hasMidi=False, clockAtBoot=10000, perKey=True, uid=[0x44, 0x33, 0x22, 0x11, 0x88, 0x77, 0x66, 0x55, 0xCC, 0xBB, 0xAA, 0x99], version=[1, 0, 5, 0])
         job = os.path.join(tmp, board + '.job.json'); json.dump(dict(options=opts, script=script), open(job, 'w'))
         r = subprocess.run(['node', emu, job], capture_output=True, text=True, timeout=120)
         em = [[int(x, 16) for x in ln.split()[1:]] for ln in r.stdout.splitlines() if ln.startswith('R')]
         emv = [tuple(int(x) for x in ln.split()[1:]) for ln in r.stdout.splitlines() if ln.startswith('V')]
         sends = [a for op, a in script if op == 'S']
+        eme = [(p_[1], int(p_[2]), int(p_[3]), int(p_[4])) for p_ in (ln.split() for ln in r.stdout.splitlines() if ln.startswith('E ') and ln != 'E .')]
+        check('emulated board plays the notes the firmware plays (%d events)' % len(fwo.events), eme == fwo.events, 'first difference: %s' % str(next(((i, a, b) for i, (a, b) in enumerate(zip(fwo.events, eme)) if a != b), (len(fwo.events), len(eme)))))
         check('emulated board answered every packet', len(em) == len(fw) == len(sends), '%d %d %d %s' % (len(em), len(fw), len(sends), r.stderr[-300:]))
         diffs = [(i, sends[i], fw[i][:12], em[i][:12]) for i in range(min(len(em), len(fw))) if fw[i] != em[i]]
         check('emulated board shows the travel the firmware streams (%d readings)' % len(emv), emv == fwo.travels, str([(a, b) for a, b in zip(emv, fwo.travels) if a != b][:4]))
