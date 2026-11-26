@@ -22,6 +22,7 @@
 #include "he_switch_matrix.h"
 #include "he_perkey.h"
 #include "he_stream.h"
+#include "he_midi.h"
 #include "he_synth.h"
 
 uint8_t  EE[4096];
@@ -84,6 +85,9 @@ int16_t adc_read(adc_mux mux) {
 // ---- outputs with no meaning here
 static uint8_t  last_reports[4096][32]; static uint32_t report_at[4096]; static int n_reports = 0;
 void raw_hid_send(uint8_t *data, uint8_t length) { if (n_reports < 4096) { report_at[n_reports] = host_now; memcpy(last_reports[n_reports++], data, length < 32 ? length : 32); } }
+// what the bridge sends to the DAW, each with the millisecond it left in
+static uint8_t  outs[2048][3]; static uint32_t out_at[2048]; static int n_out = 0;
+void he_midi_out(uint8_t status, uint8_t d1, uint8_t d2) { if (n_out < 2048) { out_at[n_out] = host_now; outs[n_out][0] = status; outs[n_out][1] = d1; outs[n_out][2] = d2; n_out++; } }
 void bootloader_jump(void) {}
 void start_slider_visualization(uint8_t value) { (void)value; }
 void start_calibration_rgb(void) {}
@@ -139,7 +143,7 @@ int main(int argc, char **argv) {
             fprintf(stdout, "\n");
         } else if (line[0] == 'T') {
             int ms = atoi(line + 2);
-            for (int t = 0; t < ms; t += 10) { host_now += 10; he_perkey_task(); host_housekeeping_save(); he_stream_task(); }
+            for (int t = 0; t < ms; t += 10) { host_now += 10; he_perkey_task(); host_housekeeping_save(); he_stream_task(); he_midi_task(); }
         } else if (line[0] == 'A') {
             int s, pct; if (sscanf(line + 2, "%d %d", &s, &pct) == 2) {
                 if (s < 0) { for (int i = 0; i < SENSOR_COUNT; i++) host_adc[i] = raw_for_pct(i, pct); }
@@ -162,10 +166,17 @@ int main(int argc, char **argv) {
         } else if (line[0] == 'X') {
             int n, ms; if (sscanf(line + 2, "%d %d", &n, &ms) == 2) { uint32_t t0 = host_now; for (int i = 0; i < n; i++) { host_now = t0 + (uint32_t)((long long)ms * (i + 1) / n); he_matrix_scan(); } }
         } else if (line[0] == 'Y') {   // n milliseconds as the board lives them: a scan and the stream's task in each
-            int n = atoi(line + 2); for (int i = 0; i < n; i++) { host_now += 1; he_matrix_scan(); he_stream_task(); }
+            int n = atoi(line + 2); for (int i = 0; i < n; i++) { host_now += 1; he_matrix_scan(); he_stream_task(); he_midi_task(); }
         } else if (line[0] == 'H') {   // what was sent to the host since the last H, each with the millisecond it left in
             for (int i = 0; i < n_reports; i++) { fprintf(stdout, "H %u", (unsigned)report_at[i]); for (int j = 0; j < 32; j++) fprintf(stdout, " %02x", last_reports[i][j]); fprintf(stdout, "\n"); }
             fprintf(stdout, "H .\n"); n_reports = 0;
+        } else if (line[0] == 'C') {   // bytes from the DAW: a realtime byte, or a song position (f2 low high)
+            unsigned a = 0, b = 0, c = 0; sscanf(line + 2, "%x %x %x", &a, &b, &c); he_midi_in((uint8_t)a, (uint8_t)b, (uint8_t)c);
+        } else if (line[0] == 'O') {   // what went to the DAW through the bridge since the last O
+            for (int i = 0; i < n_out; i++) fprintf(stdout, "O %u %02x %02x %02x\n", (unsigned)out_at[i], outs[i][0], outs[i][1], outs[i][2]);
+            fprintf(stdout, "O .\n"); n_out = 0;
+        } else if (line[0] == 'Z') {   // the board clock, ms
+            fprintf(stdout, "NOW %u\n", (unsigned)host_now);
         } else if (line[0] == 'M') {
             fprintf(stdout, "M");
             for (int r = 0; r < MATRIX_ROWS; r++) fprintf(stdout, " %04x", (unsigned)matrix[r]);

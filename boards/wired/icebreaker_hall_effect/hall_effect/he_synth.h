@@ -47,6 +47,8 @@ bool he_synth_key(matrix_row_t current_matrix[], uint8_t sensor, uint8_t row, ui
 bool he_synth_on(void);
 void he_synth_set_on(bool on);
 void he_synth_toggle(void);
+void he_synth_remap(void);            // the table of control keys changed (he_midi.c): which key does what is worked out again
+void he_synth_end_all(void);          // every note that sounds is ended, where it was started
 void he_synth_changed(bool on);       // weak: the keymap blinks the lights
 void he_synth_get(uint8_t *d);
 void he_synth_set(uint8_t *d);

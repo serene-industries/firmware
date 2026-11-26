@@ -32,6 +32,8 @@ on the Icebreaker HE and the Cleaver HE:
   strike and its velocity, pressure, the octave keys, typing kept apart;
 - the stream of the keys that move (start value 3): what is sent, when, and
   what is left out.
+- the DAW bridge: the host's clock stamped and reported, what the page plays
+  sent at its millisecond, keys as controls.
 
 To also compare every reply with the configurator's emulated board (the one
 its protocol tests run against), bundle its driver and pass it:

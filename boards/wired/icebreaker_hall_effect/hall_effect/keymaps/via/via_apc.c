@@ -19,6 +19,7 @@
 #include "he_stream.h"
 #include "he_perkey.h"
 #include "he_synth.h"
+#include "he_midi.h"
 #include "action.h"
 #include "via.h"
 #include "config.h"
@@ -72,6 +73,7 @@ enum via_he_enums {
     id_he_board_uid = HE_VAL_UID,
     id_he_calibration = HE_VAL_CAL,
     id_he_synth = HE_VAL_SYNTH,
+    id_he_midi = HE_VAL_MIDI,
     // clang-format on
 };
 
@@ -107,6 +109,10 @@ void via_he_config_set_value(uint8_t *data) {
         }
         case id_he_synth: {
             he_synth_set(data);
+            return;
+        }
+        case id_he_midi: {
+            he_midi_set(data);
             return;
         }
         case id_he_key:
@@ -276,6 +282,9 @@ void via_he_config_get_value(uint8_t *data) {
             break;
         case id_he_synth:
             he_synth_get(data);
+            break;
+        case id_he_midi:
+            he_midi_get(data);
             break;
         case id_via_he_actuation_threshold:
             *value_data = he_key_configs[0].he_actuation_threshold;

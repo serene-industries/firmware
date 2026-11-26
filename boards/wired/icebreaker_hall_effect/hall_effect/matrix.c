@@ -7,6 +7,7 @@
 #include "encoder.h"
 #include "gpio.h"
 #include "he_stream.h"
+#include "he_midi.h"
 #include "he_perkey.h"
 #include <string.h>
 
@@ -101,6 +102,7 @@ uint8_t matrix_scan(void) {
     // Lives here because this file is in SRC; the <board>_he.c file is NOT
     // compiled (QMK only auto-adds <folder>.c), so hooks placed there never run.
     he_stream_task();
+    he_midi_task();     // the DAW bridge: events whose millisecond has come, and the clock report
     he_perkey_task();   // saves mode, key-cancel pair and rapid-trigger numbers shortly after a change
 
     return updated ? 1 : 0;

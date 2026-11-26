@@ -136,9 +136,27 @@
   eight left free for the configurator's commands (so 875 reports a second at most; never fill the endpoint, the
   commands share it). The owner asked for it ("the stream is 200-something frames per sec instead of a higher
   rate that we discussed"). Not measured on a board: what it does to the scan rate (DIAGNOSTICS shows the rate).
+- **The DAW bridge** (`he_midi.c` / `he_midi.h`, identical in both boards, in `SRC`; VIA value id 28; feature bit
+  1 of a second features byte, info d[9]; BETA builds Icebreaker HE 1.0.8 / Cleaver HE 0.4.2.18, 2026-11-26,
+  unseen on a board and never tried with a DAW). The owner: "make sure all of this is always in sync with the
+  DAWs". A page cannot join a DAW's clock by itself, but the board is a MIDI device the DAW talks to and a HID
+  device the page talks to, so it carries both ways, only while the instrument mode is on:
+  clock in (MIDI clock, start, stop, continue, song position from the host; each tick stamped with the board's
+  millisecond clock; tempo over the last quarter note; told to the page in report 0xF2 on every sixth tick and
+  on every change, riding with the moving stream on the same clock); notes out (the page hands over events with
+  the board-clock millisecond they are due, the board sends each in that millisecond; a queue of 48, counted
+  when it overflows; all notes off on the channels used when the mode ends); keys as controls (twelve slots: a
+  key's depth as a controller number, pitch bend up or down, or channel pressure, sent by the board itself at a
+  hundred a second at most; such a key does not type; a note key or an octave key cannot be one); and "quiet"
+  (the board's own notes are counted but not sent while the page plays them itself: what sounds is ended first).
+  Nothing is stored. `midi_task()` runs once per `keyboard_task`, so a tick's stamp is good to one scan.
+  Not built: the board as clock master when there is no DAW, MPE, the encoder.
 - Host tests: `run_synth` in `tests/host/run.py` (the piano by place whatever the keymap says, a strike, its
   velocity against its speed, pressure, the note's end, the octave keys, typing kept apart), `run_stream` (the
   moving stream: the first whole frame, the beat, a press as its own key, two keys in one report, the free
   millisecond, a one-step flicker not sent, stopping by itself), and the comparison with the configurator's
-  emulated board covers id 27, the notes and the octave keys. The host build now compiles the stream code
+  emulated board covers id 27, the notes and the octave keys; `run_bridge` (the clock: start, ticks, tempo,
+  stop, continue, a new position, none; events out at their millisecond; the queue's limit; controls: values,
+  the two bend keys as one bend, the rate, a note key refused, rest on leaving; quiet), and the comparison
+  covers id 28, clock bytes from the host and every message the bridge sends. The host build now compiles the stream code
   (`-DRAW_ENABLE`); before 2026-11-26 `he_stream.c` was built as empty stubs there and nothing tested it.

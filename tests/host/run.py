@@ -20,7 +20,7 @@ def check(name, cond, detail=''):
 class Out:
     def __init__(self, text):
         self.replies, self.matrices, self.keys, self.travel, self.warn, self.travels = [], [], {}, {}, [], []
-        self.mode = self.pair = self.layout = self.cal = None; self.pairs = {}; self.events = []; self.reports = []
+        self.mode = self.pair = self.layout = self.cal = None; self.pairs = {}; self.events = []; self.reports = []; self.outs = []; self.nows = []
         for ln in text.splitlines():
             p = ln.split()
             if not p: continue
@@ -37,6 +37,8 @@ class Out:
             elif p[0] == 'WARN': self.warn.append(ln)
             elif p[0] == 'E' and p[1] != '.': self.events.append((p[1], int(p[2]), int(p[3]), int(p[4])))
             elif p[0] == 'H' and p[1] != '.': self.reports.append((int(p[1]), [int(x, 16) for x in p[2:]]))
+            elif p[0] == 'O' and p[1] != '.': self.outs.append((int(p[1]), [int(x, 16) for x in p[2:]]))
+            elif p[0] == 'NOW': self.nows.append(int(p[1]))
 
 def boot(binary, ee, lines):
     """One power cycle: run the script, return what the firmware printed."""
@@ -344,6 +346,20 @@ def run_board(board, title):
                 y = rng.random()
                 script.append(('S', [SET, 0, 27, 0, rng.choice([0, 1, 1])] if y < 0.4 else [GET, 0, 27, 0] if y < 0.8 else [SET, 0, 27, 1, byte(), byte(), byte(), byte(), rng.choice([0, 1, 2, 3, 4, 9, 255]), byte()]))
                 continue
+            if rng.random() < 0.09:   # the DAW bridge: the clock, events to go out, keys as controls, the read-backs
+                y = rng.random()
+                if y < 0.30: script.append(('C', rng.choice([[0xF8], [0xF8], [0xF8], [0xF8], [0xFA], [0xFB], [0xFC], [0xF2, rng.randint(0, 127), rng.randint(0, 3)]])))
+                elif y < 0.45: script.append(('S', [GET, 0, 28, 0]))
+                elif y < 0.55: script.append(('S', [GET, 0, 28, 1, rng.choice([0, 1, 2, 3, 11, 12, 200])]))
+                elif y < 0.75:
+                    cpos = rng.choice([(o.keys[i]['row'], o.keys[i]['col']) for i in busy]) if rng.random() < 0.8 else rng.choice([pos, (0xFF, 0xFF)])
+                    script.append(('S', [SET, 0, 28, 2, rng.choice([0, 1, 2, 3, 11, 12]), cpos[0], cpos[1], rng.choice([0, 1, 1, 2, 3, 4, 5]), byte(), byte()]))
+                elif y < 0.80: script.append(('S', [SET, 0, 28, 3]))
+                elif y < 0.88: script.append(('S', [SET, 0, 28, 4, rng.choice([0, 1])]))
+                else:
+                    n = rng.randint(0, 6)
+                    script.append(('S', [SET, 0, 28, 1, n] + [x for _ in range(min(n, 5)) for x in (rng.choice([0, 16, 200, 255]), rng.choice([0, 39, 40, 45, 60, 200]), rng.choice([0x90, 0x80, 0xB0, 0xE1, 0x7F, 0xF8, 0xD2]), byte(), byte())]))
+                continue
             if x < 0.08: script.append(('S', [SET, 0, 1, byte()]))
             elif x < 0.16: script.append(('S', [SET, 0, 2, byte()]))
             elif x < 0.18: script.append(('S', [SET, 0, 3]))
@@ -369,9 +385,9 @@ def run_board(board, title):
             elif x < 0.92: script.append(('N', rng.randint(1, 6)))
             elif x < 0.95: script.append(('V', rng.choice(busy if rng.random() < 0.6 else real)))
             else: script.append(('T', rng.choice([100, 400, 900, 1500, 1990, 2010, 2500, 4000])))
-        script.append(('E', 0))
+        script.append(('E', 0)); script.append(('O', 0))
         fresh(ee)
-        line = {'KC': lambda a: 'KC %d %d %x' % tuple(a), 'E': lambda a: 'E', 'S': lambda a: 'S ' + ' '.join('%02x' % b for b in a), 'T': lambda a: 'T %d' % a, 'RAW': lambda a: 'RAW %d %d' % tuple(a), 'N': lambda a: 'N %d' % a, 'V': lambda a: 'V %d' % a}
+        line = {'KC': lambda a: 'KC %d %d %x' % tuple(a), 'E': lambda a: 'E', 'S': lambda a: 'S ' + ' '.join('%02x' % b for b in a), 'T': lambda a: 'T %d' % a, 'RAW': lambda a: 'RAW %d %d' % tuple(a), 'N': lambda a: 'N %d' % a, 'V': lambda a: 'V %d' % a, 'C': lambda a: 'C ' + ' '.join('%02x' % b for b in a), 'O': lambda a: 'O'}
         fwo = boot(binary, ee, [line[op](a) for op, a in script]); fw = fwo.replies
         opts = dict(name=title, vendorId=0x5363, productId=0x0010, rows=L['rows'], cols=L['cols'], sensors=[[o.keys[i]['row'], o.keys[i]['col']] for i in range(L['sensors'])],
                     defaultPair=[sA, sD], rest=L['floor'], bottom=L['ceiling'], calStart=L['calstart'], alias=({'68': 18} if enc else {}), noTravel=([68] if enc else []), synth=True, hasMidi=False, clockAtBoot=10000, perKey=True, uid=[0x44, 0x33, 0x22, 0x11, 0x88, 0x77, 0x66, 0x55, 0xCC, 0xBB, 0xAA, 0x99], version=[1, 0, 5, 0])
@@ -381,6 +397,9 @@ def run_board(board, title):
         emv = [tuple(int(x) for x in ln.split()[1:]) for ln in r.stdout.splitlines() if ln.startswith('V')]
         sends = [a for op, a in script if op == 'S']
         eme = [(p_[1], int(p_[2]), int(p_[3]), int(p_[4])) for p_ in (ln.split() for ln in r.stdout.splitlines() if ln.startswith('E ') and ln != 'E .')]
+        emo = [[int(x, 16) for x in ln.split()[2:]] for ln in r.stdout.splitlines() if ln.startswith('O ') and ln != 'O .']
+        fwout = [m for t, m in fwo.outs]
+        check('emulated board sends the DAW what the firmware sends through the bridge (%d messages)' % len(fwout), emo == fwout, 'first difference: %s' % str(next(((i, a, b) for i, (a, b) in enumerate(zip(fwout, emo)) if a != b), (len(fwout), len(emo)))))
         check('emulated board plays the notes the firmware plays (%d events)' % len(fwo.events), eme == fwo.events, 'first difference: %s' % str(next(((i, a, b) for i, (a, b) in enumerate(zip(fwo.events, eme)) if a != b), (len(fwo.events), len(eme)))))
         check('emulated board answered every packet', len(em) == len(fw) == len(sends), '%d %d %d %s' % (len(em), len(fw), len(sends), r.stderr[-300:]))
         diffs = [(i, sends[i], fw[i][:12], em[i][:12]) for i in range(min(len(em), len(fw))) if fw[i] != em[i]]
@@ -545,11 +564,102 @@ def run_stream(board, title):
     span = max(t for t, _ in o.reports) - min(t for t, _ in o.reports)
     check('start value 2 is still whole frames at 250 a second, and 0 stops it', not moving(o.reports) and 70 <= len(whole(o.reports)) <= 78 and span <= 100, str([len(whole(o.reports)), span]))
 
+def run_bridge(board, title):
+    """The bridge to a DAW: the clock it sends, what the page plays going out at its millisecond, keys as controls."""
+    print('==', title, '(DAW bridge)')
+    binary = os.path.join(tmp, board); ee = os.path.join(tmp, board + '.bridge.ee')
+    fresh(ee)
+    o = boot(binary, ee, ['D', S(GET, 0, 22)])
+    at = {(k['row'], k['col']): s for s, k in o.keys.items()}
+    A, SPACE, UPK, DOWNK, Q = at[(2, 1)], at[(4, 3)], at[(1, 13)], at[(2, 12)], at[(1, 1)]
+    WARM, ON, OFF = ['X 600 600'], S(SET, 0, 27, 0, 1) + '\nX 5 5', S(SET, 0, 27, 0, 0)
+    STREAM, GETM = S(SET, 0, 21, 3), S(GET, 0, 28, 0)
+    def strike(s, scans, to=1000, start=0): return ['P %d %d' % (s, start)] + [l for i in range(1, scans + 1) for l in ('P %d %d' % (s, start + (to - start) * i // scans), 'Y 1')]
+    def ticks(n, ms): return [l for _ in range(n) for l in ('C f8', 'Y %d' % ms)]
+    def clock(reps): return [(t, r) for t, r in reps if r[0] == 0xF2]
+    def bit(m, pos): return (m[pos[0]] >> pos[1]) & 1
+    check('info says the build has the bridge, in a second byte of features', o.replies[0][11] == 1, str(o.replies[0][:13]))
+
+    # ---- the clock: start, 48 ticks 20 ms apart (125 beats a minute), then what the board says
+    o = boot(binary, ee, WARM + [ON, STREAM, 'Y 30', 'H', 'Z', 'C fa'] + ticks(48, 20) + [GETM, 'H', 'Z'])
+    g, cl = o.replies[-1], clock(o.reports); t0 = o.nows[0]
+    check('running, a clock seen, 125.0 beats a minute, the last tick is number 47', g[4] == 3 and g[5] * 256 + g[6] == 1250 and (g[7] << 24 | g[8] << 16 | g[9] << 8 | g[10]) == 47, str(g[4:11]))
+    six = [(t, r) for t, r in cl if r[1] & 1 and (r[4] | r[5] << 8) % 6 == 0 and (r[4] | r[5] << 8) > 0]
+    check('the page is told on every sixth tick (a sixteenth note): 6, 12 ... 42', [r[4] | r[5] << 8 for _, r in six] == [6, 12, 18, 24, 30, 36, 42], str([r[4] | r[5] << 8 for _, r in six]))
+    check('each report carries the board clock at the tick it describes, to the millisecond', all((r[2] | r[3] << 8) == ((t0 + 20 * (r[4] | r[5] << 8)) & 0xFFFF) for _, r in six), str([(r[2] | r[3] << 8, (t0 + 20 * (r[4] | r[5] << 8)) & 0xFFFF) for _, r in six][:3]))
+    check('and the tempo, once a quarter note has passed', six[-1][1][8] | six[-1][1][9] << 8 == 1250, str(six[-1][1][8:10]))
+    # stop, continue, a new position; and no clock at all
+    o = boot(binary, ee, WARM + [ON, STREAM, 'Y 30', 'C fa'] + ticks(12, 20) + ['C fc', GETM] + ticks(6, 20) + [GETM, 'C fb'] + ticks(3, 20) + [GETM, 'C f2 08 00', 'C f8', 'Y 20', 'C f8', 'Y 20', GETM, 'Y 1300', GETM, 'H'])
+    num = lambda g: g[7] << 24 | g[8] << 16 | g[9] << 8 | g[10]
+    r1, r2, r3, r4, r5 = o.replies[-5:]
+    check('stop: not running, the tick number stands still though the clock goes on (11, 11)', r1[4] == 2 and num(r1) == 11 and r2[4] == 2 and num(r2) == 11, str([r1[4], num(r1), r2[4], num(r2)]))
+    check('continue: running again from where it stood (14)', r3[4] == 3 and num(r3) == 14, str([r3[4], num(r3)]))
+    check('a song position of 8 sixteenths: the next tick is number 48, then 49', num(r4) == 49, str(num(r4)))
+    check('a second with no clock: the board says none is seen', r5[4] & 2 == 0, str(r5[4]))
+    idle = [t for t, r in clock(o.reports)][-5:]
+    check('with nothing to say the report still comes four times a second', all(245 <= b - a <= 256 for a, b in zip(idle, idle[1:])), str(idle))
+    o = boot(binary, ee, WARM + [STREAM, 'Y 30', 'C fa'] + ticks(12, 20) + ['H'])
+    check('with the instrument mode off the bridge says nothing', not clock(o.reports), str(len(clock(o.reports))))
+
+    # ---- what the page plays: out at its millisecond
+    o = boot(binary, ee, WARM + [ON, GETM])
+    def ev(due, status, d1, d2): return [due & 0xFF, (due >> 8) & 0xFF, status, d1, d2]
+    def run_out(extra):
+        o1 = boot(binary, ee, WARM + [ON, 'Z'] + extra)
+        return o1, o1.nows[0]
+    o, t0 = run_out([])
+    now16 = t0 & 0xFFFF
+    o = boot(binary, ee, WARM + [ON, 'Z', S(SET, 0, 28, 1, 3, *ev(now16 + 50, 0x90, 60, 100), *ev(now16 + 120, 0x80, 60, 0), *ev(now16, 0x99, 36, 127)), 'Y 200', 'O', GETM])
+    outs = [(t - o.nows[0], m) for t, m in o.outs]
+    check('an event due now goes at once; the others in their own millisecond (0, 50, 120)', [(t, m[0], m[1]) for t, m in outs] == [(0, 0x99, 36), (50, 0x90, 60), (120, 0x80, 60)] or [(t, m[0], m[1]) for t, m in outs] == [(0, 0x99, 36), (51, 0x90, 60), (121, 0x80, 60)], str(outs))
+    g = o.replies[-1]
+    check('read-back: nothing waiting, three sent, none dropped, twelve control slots', g[13] == 0 and g[14] * 256 + g[15] == 3 and g[16] == 0 and g[17] == 12, str(g[13:18]))
+    o = boot(binary, ee, WARM + [ON, 'Z', S(SET, 0, 28, 1, 2, *ev(now16 + 400, 0x90, 60, 100), *ev(now16 + 500, 0x91, 62, 100)), 'Y 420', 'O', OFF, 'Y 300', 'O'])
+    a, b = [m for t, m in o.outs[:1]], [m for t, m in o.outs[1:]]
+    check('leaving the mode: what waited is dropped, and the channel a note went out on is told all notes off', a == [[0x90, 60, 100]] and b == [[0xB0, 123, 0]], str(o.outs))
+    many = [S(SET, 0, 28, 1, 5, *[x for i in range(5) for x in ev(now16 + 5000 + j * 5 + i, 0x90, 40 + i, 1)]) for j in range(12)]
+    o = boot(binary, ee, WARM + [ON] + many + [GETM])
+    g = o.replies[-1]
+    check('sixty events far ahead: forty-eight wait, twelve are counted as dropped', g[13] == 48 and g[16] == 12, str(g[13:17]))
+    o = boot(binary, ee, WARM + [S(SET, 0, 28, 1, 1, *ev(now16, 0x90, 60, 100)), 'Y 20', 'O'])
+    check('with the mode off nothing goes out', not o.outs, str(o.outs))
+
+    # ---- keys as controls
+    CTL = lambda slot, pos, kind, num=0, ch=0: S(SET, 0, 28, 2, slot, pos[0], pos[1], kind, num, ch)
+    SETUP = [CTL(0, (4, 3), 1, 64), CTL(1, (1, 13), 2), CTL(2, (2, 12), 3), CTL(3, (2, 1), 1, 7)]
+    o = boot(binary, ee, WARM + [ON] + SETUP + ['P %d 500' % SPACE, 'Y 30', 'O', 'M', 'P %d 1000' % SPACE, 'Y 30', 'P %d 0' % SPACE, 'Y 30', 'O', S(GET, 0, 28, 1, 0), S(GET, 0, 28, 1, 5)])
+    first, rest = o.outs[:1], [m for t, m in o.outs[1:]]
+    check('SPACE as controller 64: half way down is 57, and it does not type', [m for t, m in first] == [[0xB0, 64, 57]] and bit(o.matrices[0], (4, 3)) == 0, str(o.outs[:2]))
+    check('the bottom is 127 and rest is 0', rest == [[0xB0, 64, 127], [0xB0, 64, 0]], str(rest))
+    check('read-back: slot 0 is that key, a controller, number 64; slot 5 is empty', o.replies[-2][5:10] == [4, 3, 1, 64, 0] and o.replies[-1][5:8] == [0xFF, 0xFF, 0], str([o.replies[-2][5:10], o.replies[-1][5:8]]))
+    o = boot(binary, ee, WARM + [ON] + SETUP + ['P %d 1000' % UPK, 'Y 30', 'O', 'P %d 1000' % DOWNK, 'Y 30', 'O', 'P %d 0' % UPK, 'Y 30', 'O'])
+    bends = [m for t, m in o.outs]
+    check('the two bend keys make one bend: up is the top (7f 7f), both is the middle (00 40), down alone is the bottom (01 00)', bends == [[0xE0, 0x7F, 0x7F], [0xE0, 0x00, 0x40], [0xE0, 0x01, 0x00]], str(bends))
+    ramp = [l for i in range(1, 101) for l in ('P %d %d' % (SPACE, i * 10), 'Y 1')]
+    o = boot(binary, ee, WARM + [ON] + SETUP + ramp + ['Y 20', 'O'])
+    vals = [m[2] for t, m in o.outs]
+    check('a press over a tenth of a second: at most a hundred messages a second, rising, ending at 127 (%d messages)' % len(vals), 6 <= len(vals) <= 12 and vals == sorted(vals) and vals[-1] == 127, str(vals))
+    o = boot(binary, ee, WARM + [ON] + SETUP + strike(A, 8) + ['Y 20', 'E', 'O'])
+    check('a note key cannot be a control: A still plays middle C and sends no controller', [e[:3] for e in o.events if e[0] == 'on'] == [('on', 0, 60)] and not o.outs, str([o.events[:2], o.outs]))
+    o = boot(binary, ee, WARM + [ON] + SETUP + ['P %d 1000' % SPACE, 'P %d 1000' % UPK, 'Y 30', 'O', OFF, 'O', 'P %d 0' % SPACE, 'Y 60', 'P %d 1000' % SPACE, 'Y 60', 'M', 'O'])
+    left = [m for t, m in o.outs[2:]]
+    check('leaving the mode with controls held: each is sent back to rest, and the key types again', sorted(left) == sorted([[0xB0, 64, 0], [0xE0, 0x00, 0x40]]) and bit(o.matrices[0], (4, 3)) == 1, str(left))
+    o = boot(binary, ee, WARM + [ON] + SETUP + [S(SET, 0, 28, 3), 'P %d 1000' % SPACE, 'Y 60', 'M', 'O', S(GET, 0, 28, 1, 0)])
+    check('every slot emptied: SPACE types again and sends nothing', bit(o.matrices[0], (4, 3)) == 1 and not o.outs and o.replies[-1][5] == 0xFF, str(o.outs))
+
+    # ---- the board's own notes kept in while the page plays them
+    o = boot(binary, ee, WARM + [ON, S(SET, 0, 28, 4, 1)] + strike(A, 8) + ['Y 20', 'E', S(GET, 0, 27, 0), GETM])
+    check('kept in: the strike is counted and timed but not sent', not o.events and o.replies[-2][13] * 256 + o.replies[-2][14] == 1 and o.replies[-1][18] == 1, str([o.events, o.replies[-2][13:15]]))
+    o = boot(binary, ee, WARM + [ON] + strike(A, 8) + ['Y 20', 'E', S(SET, 0, 28, 4, 1), 'E', 'P %d 0' % A, 'Y 20', 'E'])
+    check('kept in while a note sounds: the note is ended first, so nothing is left on in the DAW', [e[0] for e in o.events if e[0] != 'pr'] == ['on', 'off'], str(o.events))
+
 run_board('icebreaker_hall_effect', 'Icebreaker HE')
 run_synth('icebreaker_hall_effect', 'Icebreaker HE')
 run_stream('icebreaker_hall_effect', 'Icebreaker HE')
+run_bridge('icebreaker_hall_effect', 'Icebreaker HE')
 run_board('cleaver', 'Cleaver HE')
 run_synth('cleaver', 'Cleaver HE')
 run_stream('cleaver', 'Cleaver HE')
+run_bridge('cleaver', 'Cleaver HE')
 print('%d passed, %d failed' % (passed, failed))
 sys.exit(1 if failed else 0)

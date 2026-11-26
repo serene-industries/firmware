@@ -3,6 +3,7 @@
 #include "quantum.h"
 #include "he_synth.h"
 #include "he_perkey.h"
+#include "he_midi.h"
 
 #ifdef MIDI_ENABLE
 #    include "qmk_midi.h"
@@ -57,7 +58,7 @@ static uint8_t  last_note = 0, last_velocity = 0;
 static const uint8_t SYN_WHITE[] = {0, 2, 4, 5, 7, 9, 11, 12, 14, 16, 17};          // columns 1 to 11: C D E F G A B C D E F
 static const uint8_t SYN_BLACK[] = {NN, 1, 3, NN, 6, 8, 10, NN, 13, 15, NN, 18};    // columns 1 to 12: . C# D# . F# G# A# . C# D# . F#
 #define NO_NOTE 0xFF
-enum { ROLE_NONE, ROLE_NOTE, ROLE_DOWN, ROLE_UP };
+enum { ROLE_NONE, ROLE_NOTE, ROLE_DOWN, ROLE_UP, ROLE_CONTROL };   // a control: a key the configurator has made a controller (he_midi.c)
 static uint8_t note_of[SENSOR_COUNT], role_of[SENSOR_COUNT];
 
 static void map_notes(void) {
@@ -67,9 +68,10 @@ static void map_notes(void) {
         if (r == BLACK_ROW && c >= 1 && c <= (uint8_t)sizeof(SYN_BLACK)) st = SYN_BLACK[c - 1];
         int16_t n  = st == NN ? -1 : 60 + st + 12 * ((int16_t)octave - 2);
         note_of[s] = (n < 0 || n > 127) ? NO_NOTE : (uint8_t)n;
-        role_of[s] = note_of[s] != NO_NOTE ? ROLE_NOTE : (r == SHIFT_ROW && c == SHIFT_DOWN_COL) ? ROLE_DOWN : (r == SHIFT_ROW && c == SHIFT_UP_COL) ? ROLE_UP : ROLE_NONE;
+        role_of[s] = note_of[s] != NO_NOTE ? ROLE_NOTE : (r == SHIFT_ROW && c == SHIFT_DOWN_COL) ? ROLE_DOWN : (r == SHIFT_ROW && c == SHIFT_UP_COL) ? ROLE_UP : he_midi_is_control(s) ? ROLE_CONTROL : ROLE_NONE;
     }
 }
+void he_synth_remap(void) { if (on) map_notes(); }
 
 // ---- one key
 typedef struct {
@@ -119,8 +121,11 @@ static uint16_t tenths_of(uint32_t q8) {   // scans * 256 to tenths of a millise
     return t > 0xFFFF ? 0xFFFF : (uint16_t)t;
 }
 
+// The board's own notes are kept in while the configurator plays them itself (he_midi.h, quiet): counted, not sent.
+static void note_out(uint8_t kind, uint8_t ch, uint8_t note, uint8_t value) { if (!he_midi_quiet()) he_synth_out(kind, ch, note, value); }
+
 static void end_note(synth_key_t *k, uint8_t vel) {
-    if (k->phase == 2) he_synth_out(0, channel, k->note, vel);
+    if (k->phase == 2) note_out(0, channel, k->note, vel);
     k->phase = 0;
 }
 
@@ -134,6 +139,11 @@ bool he_synth_key(matrix_row_t current_matrix[], uint8_t s, uint8_t row, uint8_t
 
     uint16_t t = fine(s, raw), a = depth_a * 10, b = depth_b * 10, rel = depth_rel * 10;
     uint32_t now = scans << 8;
+    if (role_of[s] == ROLE_CONTROL) {   // its depth is a controller, a bend or pressure: he_midi.c sends it
+        he_midi_control(s, t);
+        k->prev = t;
+        return true;
+    }
     if (role_of[s] != ROLE_NOTE) {
         // An octave key: one step each time it passes the second depth, armed again above the release depth.
         // Notes that sound keep the pitch they were started at and end there; the next strike is in the new octave.
@@ -163,7 +173,7 @@ bool he_synth_key(matrix_row_t current_matrix[], uint8_t s, uint8_t row, uint8_t
             k->sent_at       = scans;
             k->deep          = now;
             notes_started++;
-            he_synth_out(1, channel, k->note, last_velocity);
+            note_out(1, channel, k->note, last_velocity);
         } else if (t + 30 < a) {
             k->phase = 0;   // it went back before the second depth: no note
         }
@@ -178,7 +188,7 @@ bool he_synth_key(matrix_row_t current_matrix[], uint8_t s, uint8_t row, uint8_t
             if (diff >= 2 && scans - k->sent_at >= gap) {
                 k->sent    = p;
                 k->sent_at = scans;
-                he_synth_out(2, channel, k->note, p);
+                note_out(2, channel, k->note, p);
             }
         }
     }
@@ -198,9 +208,11 @@ void he_synth_set_on(bool want) {
         for (uint8_t s = 0; s < SENSOR_COUNT; s++) key[s].prev = 1000;      // a key held while the mode comes on does not strike
     }
     on = want;
+    he_midi_mode(on);
     he_synth_changed(on);
 }
 void he_synth_toggle(void) { he_synth_set_on(!on); }
+void he_synth_end_all(void) { for (uint8_t s = 0; s < SENSOR_COUNT; s++) end_note(&key[s], 64); }
 
 static uint8_t within(uint8_t v, uint8_t lo, uint8_t hi) { return v < lo ? lo : v > hi ? hi : v; }
 

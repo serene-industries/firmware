@@ -29,6 +29,7 @@
 #ifndef RAW_ENABLE
 void he_stream_set(uint8_t on) { (void)on; }
 void he_stream_task(void) {}
+bool he_stream_is_moving(void) { return false; }
 #else
 
 #include <string.h>
@@ -74,6 +75,8 @@ void he_stream_set(uint8_t on) {
         cursor      = 0;
     }
 }
+
+bool he_stream_is_moving(void) { return stream_on && moving; }
 
 static void send_whole(void) {
     const uint8_t *src = &he_live_travel[0][0];

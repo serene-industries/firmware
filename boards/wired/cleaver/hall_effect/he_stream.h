@@ -17,3 +17,4 @@
 // (see he_stream.c), a whole frame four times a second to stand on, and a beat while nothing moves.
 void he_stream_set(uint8_t on);
 void he_stream_task(void);
+bool he_stream_is_moving(void);   // the keys-that-move stream is on: the clock report (he_midi.c) rides with it
