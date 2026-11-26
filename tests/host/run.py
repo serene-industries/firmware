@@ -20,7 +20,7 @@ def check(name, cond, detail=''):
 class Out:
     def __init__(self, text):
         self.replies, self.matrices, self.keys, self.travel, self.warn, self.travels = [], [], {}, {}, [], []
-        self.mode = self.pair = self.layout = self.cal = None; self.pairs = {}; self.events = []; self.reports = []; self.outs = []; self.nows = []
+        self.mode = self.pair = self.layout = self.cal = None; self.pairs = {}; self.events = []; self.reports = []; self.outs = []; self.nows = []; self.lights = []
         for ln in text.splitlines():
             p = ln.split()
             if not p: continue
@@ -39,6 +39,7 @@ class Out:
             elif p[0] == 'H' and p[1] != '.': self.reports.append((int(p[1]), [int(x, 16) for x in p[2:]]))
             elif p[0] == 'O' and p[1] != '.': self.outs.append((int(p[1]), [int(x, 16) for x in p[2:]]))
             elif p[0] == 'NOW': self.nows.append(int(p[1]))
+            elif p[0] == 'G': self.lights.append((int(p[1]), int(p[2]), int(p[3]), p[4]))
 
 def boot(binary, ee, lines):
     """One power cycle: run the script, return what the firmware printed."""
@@ -513,6 +514,33 @@ def run_synth(board, title):
     check('four steps up stop at +2 (A is 84); six steps down stop at -2 (A is 36); Z does not type', o.replies[1][11] == 4 and o.replies[2][11] == 0 and on == [84, 36] and bit(o.matrices[0], (3, 1)) == 0, str([o.replies[1][11], o.replies[2][11], on]))
     o = boot(binary, ee, WARM + strike(X_, 8) + ['X 20 20', ON, 'X 40 40', GETS] + up(X_) + [OFF] + strike(X_, 8) + ['X 20 20', 'M'])
     check('X held when the mode comes on is no step; with the mode off X types again', o.replies[1][11] == 2 and bit(o.matrices[0], (3, 2)) == 1, str(o.replies[1][11]))
+
+    # the lights: only the instrument's keys are lit while the mode is on, a key that is down is bright, and the old lighting comes back
+    WHITE = [at[(2, c)] for c in range(1, 12)]; BLACK = [at[(1, c)] for c in (2, 3, 5, 6, 7, 9, 10, 12)]
+    want = ''.join('w' if i in WHITE else 'b' if i in BLACK else 'c' if i in (Z, X_) else '.' for i in range(len(at)))
+    SPACE = at[(4, 3)]
+    gets = lambda o: [r for r in o.replies if r[0] == GET and r[2] == 27]
+    o = boot(binary, ee, WARM + ['G', ON, 'G', GETS, 'P %d 400' % A, 'Y 40', 'G', 'P %d 0' % A, 'Y 40', 'G',
+                                 S(SET, 0, 28, 2, 0, 4, 3, 1, 64, 0), 'Y 40', 'G', GETS, 'Y 3000', 'G', OFF, 'G', GETS])
+    L = o.lights
+    check('lights: nothing is painted while the mode is off', L[0][0] == 0 and L[0][1] == 0, str(L[0]))
+    check('lights: with the mode on the white keys, the black keys and the two octave keys are lit and every other key is dark', L[1][0] == 1 and L[1][3] == want, L[1][3] + ' wanted ' + want)
+    check('lights: the board says so (has them, wanted, painted; 21 keys lit)', gets(o)[0][21] == 7 and gets(o)[0][22] == 21, str(gets(o)[0][21:23]))
+    down = want[:A] + 'W' + want[A + 1:]
+    check('lights: A held is bright, and back as it was when it comes up', L[2][3] == down and L[3][3] == want, L[2][3])
+    ctl = want[:SPACE] + 'c' + want[SPACE + 1:]
+    check('lights: a key the configurator makes a control lights up as one (22 lit)', L[4][3] == ctl and gets(o)[1][22] == 22, L[4][3])
+    check('lights: three seconds with nothing moving write the strip about once a second, not every scan (%d writes)' % (L[5][1] - L[4][1]), 2 <= L[5][1] - L[4][1] <= 4, str([L[4][1], L[5][1]]))
+    check('lights: the mode off puts the old lighting back, once', L[6][0] == 0 and L[6][2] == 1 and gets(o)[2][21] == 3 and gets(o)[2][22] == 0, str([L[6], gets(o)[2][21:23]]))
+    seq = [ON]
+    for _ in range(40): seq += ['P %d 400' % A, 'Y 5', 'P %d 0' % A, 'Y 5']
+    o = boot(binary, ee, WARM + seq + ['G'])
+    check('lights: a key hammered eighty times in 400 ms writes the strip at most forty times a second (%d writes)' % o.lights[0][1], o.lights[0][1] <= 18, str(o.lights[0][1]))
+    o = boot(binary, ee, WARM + [ON, S(SET, 0, 27, 2, 0), 'G', GETS, 'Y 1200', 'G', S(SET, 0, 27, 2, 1), 'G', GETS, OFF])
+    check('lights: turned off from the configurator the old lighting is back while the mode stays on, and nothing repaints; turned on they are painted again',
+          o.lights[0][0] == 0 and o.lights[0][2] == 1 and gets(o)[0][21] == 1 and o.lights[1][1] == o.lights[0][1] and o.lights[2][0] == 1 and gets(o)[1][21] == 7, str([o.lights, gets(o)[0][21], gets(o)[1][21]]))
+    o = boot(binary, ee, WARM + [S(SET, 0, 4), 'T 50', ON, 'G', 'Y 1500', 'G'])   # calibration paints the keys itself
+    check('lights: while the board is calibrating the instrument does not repaint over it', o.lights[1][1] == o.lights[0][1], str(o.lights))
 
 def run_stream(board, title):
     """The stream of the keys that move: a whole frame to stand on, then one report a millisecond holding only what changed."""

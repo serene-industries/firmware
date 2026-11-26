@@ -309,3 +309,39 @@ void end_slider_visualization(void) {
     rgblight_set();
     slider_visualization_active = false;
 }
+
+// ---- the instrument's lights (he_synth.c). Only the keys that do something in the mode are lit; the lighting
+// that was there is kept here and put back when the mode ends.
+#include "he_synth.h"
+static bool    synth_lights_held = false;
+static uint8_t synth_lights_mode;
+static HSV     synth_lights_hsv;
+bool he_lights_paint(const uint8_t *kinds) {
+    if (!rgblight_is_enabled() || slider_visualization_active) return false;
+    if (!synth_lights_held) {
+        synth_lights_mode = rgblight_get_mode();
+        synth_lights_hsv  = rgblight_get_hsv();
+        rgblight_mode_noeeprom(RGBLIGHT_MODE_STATIC_LIGHT);
+        synth_lights_held = true;
+    }
+    uint8_t full = synth_lights_hsv.v, rest = (uint8_t)(((uint16_t)full * 2) / 5), dim = (uint8_t)(full / 6);
+    for (uint8_t s = 0; s < SENSOR_COUNT; s++) {
+        bool    down = (kinds[s] & HE_LIGHT_DOWN) != 0;
+        uint8_t led  = sensor_to_led_map[s];
+        switch (kinds[s] & 0x7F) {
+            case HE_LIGHT_WHITE:   rgblight_sethsv_at(0, 0, down ? full : rest, led); break;
+            case HE_LIGHT_BLACK:   rgblight_sethsv_at(21, 255, down ? full : rest, led); break;   // amber
+            case HE_LIGHT_CONTROL: rgblight_sethsv_at(0, 0, down ? full : dim, led); break;
+            default:               rgblight_sethsv_at(0, 0, 0, led); break;
+        }
+    }
+    rgblight_set();
+    return true;
+}
+void he_lights_end(void) {
+    if (!synth_lights_held) return;
+    synth_lights_held = false;
+    rgblight_mode_noeeprom(synth_lights_mode);
+    rgblight_sethsv_noeeprom(synth_lights_hsv.h, synth_lights_hsv.s, synth_lights_hsv.v);
+    rgblight_set();
+}

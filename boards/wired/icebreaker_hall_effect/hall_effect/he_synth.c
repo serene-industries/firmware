@@ -61,7 +61,9 @@ static const uint8_t SYN_BLACK[] = {NN, 1, 3, NN, 6, 8, 10, NN, 13, 15, NN, 18};
 enum { ROLE_NONE, ROLE_NOTE, ROLE_DOWN, ROLE_UP, ROLE_CONTROL };   // a control: a key the configurator has made a controller (he_midi.c)
 static uint8_t note_of[SENSOR_COUNT], role_of[SENSOR_COUNT];
 
+static bool lights_dirty;
 static void map_notes(void) {
+    lights_dirty = true;
     for (uint8_t s = 0; s < SENSOR_COUNT; s++) {
         uint8_t r = sensor_to_matrix_map[s].row, c = sensor_to_matrix_map[s].col, st = NN;
         if (r == WHITE_ROW && c >= 1 && c <= (uint8_t)sizeof(SYN_WHITE)) st = SYN_WHITE[c - 1];
@@ -72,6 +74,37 @@ static void map_notes(void) {
     }
 }
 void he_synth_remap(void) { if (on) map_notes(); }
+
+// ---- the lights. While the mode is on only the keys that do something in it are lit, so the board shows the
+// instrument that is laid over it (owner, 2026-11-26: "can we light up only the LEDs that correspond with the
+// layout?"): a white key is white, a black key amber, an octave key or a key the configurator made a control is
+// dim, every other key is dark. A key that is down is at full brightness, the others at two fifths of it. The
+// brightness is the one the lights had; a board whose lights are off stays dark. The board file paints
+// (he_lights_paint: it owns the map from a sensor to its LED) and puts the lighting back as it was on leaving.
+// The strip is written at most forty times a second, and once a second whatever else painted over it is undone.
+// Nothing is stored.
+static bool     lights = true, lights_shown = false;
+static uint8_t  light_down[SENSOR_COUNT];
+static uint32_t lights_at = 0;
+static uint8_t light_kind(uint8_t s) {
+    if (role_of[s] == ROLE_NONE) return HE_LIGHT_OFF;
+    if (role_of[s] != ROLE_NOTE) return HE_LIGHT_CONTROL;
+    return sensor_to_matrix_map[s].row == BLACK_ROW ? HE_LIGHT_BLACK : HE_LIGHT_WHITE;
+}
+static uint8_t lights_count(void) { uint8_t n = 0; for (uint8_t s = 0; s < SENSOR_COUNT; s++) if (light_kind(s) != HE_LIGHT_OFF) n++; return n; }
+static void lights_paint(void) {
+    uint8_t kinds[SENSOR_COUNT];
+    for (uint8_t s = 0; s < SENSOR_COUNT; s++) kinds[s] = light_kind(s) | (light_down[s] ? HE_LIGHT_DOWN : 0);
+    lights_shown = he_lights_paint(kinds);
+    lights_dirty = false;
+    lights_at    = timer_read32();
+}
+void he_synth_lights_task(void) {
+    if (!on || !lights) return;
+    if (he_config.he_calibration_mode) { lights_dirty = true; return; }   // calibration paints the keys itself; ours come back after it
+    uint32_t since = timer_elapsed32(lights_at);
+    if ((lights_dirty && since >= 25) || since >= 1000) lights_paint();
+}
 
 // ---- one key
 typedef struct {
@@ -138,6 +171,8 @@ bool he_synth_key(matrix_row_t current_matrix[], uint8_t s, uint8_t row, uint8_t
     }
 
     uint16_t t = fine(s, raw), a = depth_a * 10, b = depth_b * 10, rel = depth_rel * 10;
+    { bool d = light_down[s] ? t + 30 >= a : t >= a;   // its light: down from the first depth, up three under it
+      if (d != light_down[s]) { light_down[s] = d; lights_dirty = true; } }
     uint32_t now = scans << 8;
     if (role_of[s] == ROLE_CONTROL) {   // its depth is a controller, a bend or pressure: he_midi.c sends it
         he_midi_control(s, t);
@@ -209,7 +244,10 @@ void he_synth_set_on(bool want) {
     }
     on = want;
     he_midi_mode(on);
-    he_synth_changed(on);
+    bool lit;                                // the lights say the mode changed; without them the keymap blinks
+    if (on) { memset(light_down, 0, sizeof(light_down)); if (lights) lights_paint(); lit = lights_shown; }
+    else    { lit = lights_shown; if (lights_shown) he_lights_end(); lights_shown = false; }
+    if (!lit) he_synth_changed(on);
 }
 void he_synth_toggle(void) { he_synth_set_on(!on); }
 void he_synth_end_all(void) { for (uint8_t s = 0; s < SENSOR_COUNT; s++) end_note(&key[s], 64); }
@@ -235,6 +273,8 @@ void he_synth_get(uint8_t *d) {
     d[16] = last_tenths & 0xFF;
     d[17] = HE_SYNTH_HAS_MIDI;
     d[18] = HE_SYNTH_LAYOUT_PIANO;
+    d[19] = 1 | (lights ? 2 : 0) | (lights_shown ? 4 : 0);   // the lights: this build has them, they are wanted, they are painted now
+    d[20] = lights_shown ? lights_count() : 0;                 // how many keys are lit
 }
 
 void he_synth_set(uint8_t *d) {
@@ -255,5 +295,9 @@ void he_synth_set(uint8_t *d) {
             map_notes();
         }
         if (d[7] != 0xFF) pressure = d[7] ? 1 : 0;
+    } else if (d[1] == 2) {                  // the lights: 1 only the instrument's keys while the mode is on, 0 the lighting as it is
+        lights = d[2] != 0;
+        if (on && lights) lights_paint();
+        else if (lights_shown) { he_lights_end(); lights_shown = false; }
     }
 }

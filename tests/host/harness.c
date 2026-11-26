@@ -89,6 +89,10 @@ void raw_hid_send(uint8_t *data, uint8_t length) { if (n_reports < 4096) { repor
 static uint8_t  outs[2048][3]; static uint32_t out_at[2048]; static int n_out = 0;
 void he_midi_out(uint8_t status, uint8_t d1, uint8_t d2) { if (n_out < 2048) { out_at[n_out] = host_now; outs[n_out][0] = status; outs[n_out][1] = d1; outs[n_out][2] = d2; n_out++; } }
 void bootloader_jump(void) {}
+// the instrument's lights: what the mode last painted, a letter a sensor (. off, w white key, b black key, c control; a capital while the key is down)
+static char lights_now[SENSOR_COUNT + 1]; static int lights_painted = 0, lights_writes = 0, lights_ended = 0;
+bool he_lights_paint(const uint8_t *kinds) { for (int i = 0; i < SENSOR_COUNT; i++) { char c = ".wbc"[kinds[i] & 3]; lights_now[i] = (kinds[i] & HE_LIGHT_DOWN) && c != '.' ? (char)(c - 32) : c; } lights_painted = 1; lights_writes++; return true; }
+void he_lights_end(void) { lights_painted = 0; lights_ended++; }
 void start_slider_visualization(uint8_t value) { (void)value; }
 void start_calibration_rgb(void) {}
 void end_calibration_visual(void) {}
@@ -143,7 +147,7 @@ int main(int argc, char **argv) {
             fprintf(stdout, "\n");
         } else if (line[0] == 'T') {
             int ms = atoi(line + 2);
-            for (int t = 0; t < ms; t += 10) { host_now += 10; he_perkey_task(); host_housekeeping_save(); he_stream_task(); he_midi_task(); }
+            for (int t = 0; t < ms; t += 10) { host_now += 10; he_perkey_task(); host_housekeeping_save(); he_stream_task(); he_midi_task(); he_synth_lights_task(); }
         } else if (line[0] == 'A') {
             int s, pct; if (sscanf(line + 2, "%d %d", &s, &pct) == 2) {
                 if (s < 0) { for (int i = 0; i < SENSOR_COUNT; i++) host_adc[i] = raw_for_pct(i, pct); }
@@ -164,9 +168,9 @@ int main(int argc, char **argv) {
                 host_adc[s] = (uint16_t)(v + 0.5);
             }
         } else if (line[0] == 'X') {
-            int n, ms; if (sscanf(line + 2, "%d %d", &n, &ms) == 2) { uint32_t t0 = host_now; for (int i = 0; i < n; i++) { host_now = t0 + (uint32_t)((long long)ms * (i + 1) / n); he_matrix_scan(); } }
+            int n, ms; if (sscanf(line + 2, "%d %d", &n, &ms) == 2) { uint32_t t0 = host_now; for (int i = 0; i < n; i++) { host_now = t0 + (uint32_t)((long long)ms * (i + 1) / n); he_matrix_scan(); he_synth_lights_task(); } }
         } else if (line[0] == 'Y') {   // n milliseconds as the board lives them: a scan and the stream's task in each
-            int n = atoi(line + 2); for (int i = 0; i < n; i++) { host_now += 1; he_matrix_scan(); he_stream_task(); he_midi_task(); }
+            int n = atoi(line + 2); for (int i = 0; i < n; i++) { host_now += 1; he_matrix_scan(); he_stream_task(); he_midi_task(); he_synth_lights_task(); }
         } else if (line[0] == 'H') {   // what was sent to the host since the last H, each with the millisecond it left in
             for (int i = 0; i < n_reports; i++) { fprintf(stdout, "H %u", (unsigned)report_at[i]); for (int j = 0; j < 32; j++) fprintf(stdout, " %02x", last_reports[i][j]); fprintf(stdout, "\n"); }
             fprintf(stdout, "H .\n"); n_reports = 0;
@@ -190,6 +194,8 @@ int main(int argc, char **argv) {
             fprintf(stdout, "MODE %d\n", he_config.he_actuation_mode);
             for (int p = 0; p < HE_CANCEL_PAIRS; p++) fprintf(stdout, "PAIR %d %d %d\n", p, he_pairs[p].a, he_pairs[p].b);
             fprintf(stdout, "CAL %d\n", he_config.he_calibration_mode ? 1 : 0);
+        } else if (line[0] == 'G') {   // the lights: painted or not, how often the strip was written, how often the old lighting was put back, and each sensor's light
+            fprintf(stdout, "G %d %d %d %s\n", lights_painted, lights_writes, lights_ended, lights_painted ? lights_now : "-");
         } else if (line[0] == 'V') {
             int s = atoi(line + 2);
             fprintf(stdout, "V %d %d\n", s, he_live_travel[sensor_to_matrix_map[s].row][sensor_to_matrix_map[s].col]);

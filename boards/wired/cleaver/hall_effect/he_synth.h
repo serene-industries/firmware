@@ -22,10 +22,13 @@
 //                  d[15..16] the time between the two depths of that note in tenths of a millisecond,
 //                  d[17] 1 if this build has the MIDI interface (0: events are counted, not sent),
 //                  d[18] the note layout: 1 the piano by place (0, older builds: the tracker layout by keycode)
+//                  d[19] the lights: bit 0 this build has them, bit 1 they are wanted, bit 2 they are painted now,
+//                  d[20] how many keys are lit (0 while they are not painted)
 //   set  d[1] 0, d[2] 1 or 0            the mode on or off
 //   set  d[1] 1, d[2] first depth, d[3] second depth, d[4] release depth, d[5] channel,
 //        d[6] octave shift + 2, d[7] pressure 1 or 0     (0xFF leaves a value; the depths are kept
 //        apart: first 5 to 50, second at least 10 past it and at most 90, release under the second)
+//   set  d[1] 2, d[2] 1 or 0            the lights: only the instrument's keys while the mode is on (the default), or the lighting as it is
 // Nothing here is stored: the settings are the defaults again after a power cycle.
 #pragma once
 
@@ -50,8 +53,19 @@ void he_synth_toggle(void);
 void he_synth_remap(void);            // the table of control keys changed (he_midi.c): which key does what is worked out again
 void he_synth_end_all(void);          // every note that sounds is ended, where it was started
 void he_synth_changed(bool on);       // weak: the keymap blinks the lights
+void he_synth_lights_task(void);      // once a scan: repaints the lights when a key went down or came up
 void he_synth_get(uint8_t *d);
 void he_synth_set(uint8_t *d);
 // Where the events go. With the MIDI interface: to it. Without (and on a host): a weak stand-in.
 // kind 0 note off, 1 note on, 2 pressure.
 void he_synth_out(uint8_t kind, uint8_t channel, uint8_t note, uint8_t value);
+
+// The lights (he_synth.c decides, the board's rgb file paints: it owns the map from a sensor to its LED).
+// kinds[sensor]: one of the four below, with HE_LIGHT_DOWN added while the key is down.
+#define HE_LIGHT_OFF     0
+#define HE_LIGHT_WHITE   1    // a white key
+#define HE_LIGHT_BLACK   2    // a black key
+#define HE_LIGHT_CONTROL 3    // an octave key, or a key the configurator made a control
+#define HE_LIGHT_DOWN    0x80
+bool he_lights_paint(const uint8_t *kinds);   // false: the lights are off or busy, and nothing was painted
+void he_lights_end(void);                     // the lighting as it was before the first paint

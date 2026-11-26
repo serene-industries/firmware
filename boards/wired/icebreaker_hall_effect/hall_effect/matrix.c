@@ -103,6 +103,7 @@ uint8_t matrix_scan(void) {
     // compiled (QMK only auto-adds <folder>.c), so hooks placed there never run.
     he_stream_task();
     he_midi_task();     // the DAW bridge: events whose millisecond has come, and the clock report
+    he_synth_lights_task();   // the instrument's lights, when a key went down or came up
     he_perkey_task();   // saves mode, key-cancel pair and rapid-trigger numbers shortly after a change
 
     return updated ? 1 : 0;

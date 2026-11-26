@@ -103,7 +103,7 @@
   emulated board answers every packet as this source does. Run it before any
   HE release; it proves the logic, not the MCU.
 
-## The instrument mode (branch work; BETA builds Icebreaker HE 1.0.7 / Cleaver HE 0.4.2.17, 2026-11-26, unseen on a board; the owner played 1.0.6 on an Icebreaker HE)
+## The instrument mode (branch work; BETA builds up to Icebreaker HE 1.0.9 / Cleaver HE 0.4.2.19, 2026-11-26, unseen on a board; the owner played 1.0.6 and 1.0.7 on an Icebreaker HE)
 
 - `he_synth.c` / `he_synth.h` in each HE board folder (identical, in `SRC`). Off at power-up; the keycode SYNTH
   (QK_KB_9, on the function layer beside the mode keys) or VIA value id 27 switches it. While on, the board
@@ -151,6 +151,21 @@
   (the board's own notes are counted but not sent while the page plays them itself: what sounds is ended first).
   Nothing is stored. `midi_task()` runs once per `keyboard_task`, so a tick's stamp is good to one scan.
   Not built: the board as clock master when there is no DAW, MPE, the encoder.
+- **The instrument's lights** (BETA builds Icebreaker HE 1.0.9 / Cleaver HE 0.4.2.19, 2026-11-26, unseen on a
+  board; the owner: "for the synth drums, and for the piano keys, can we light up only the LEDs that correspond
+  with the layout?"). While the mode is on only the keys that do something in it are lit: a white key white, a
+  black key amber (hue 21), an octave key or a control key dim white, every other key dark; a key that is down
+  (from the first depth) is at the brightness the lights had, the others at two fifths of it. `he_synth.c`
+  decides (`light_kind`, `lights_paint`, `he_synth_lights_task` once a scan from `matrix.c`), the board's rgb
+  file paints (`he_lights_paint`, `he_lights_end` in `icebreaker_rgb.c` / `cleaver_rgb.c`: it owns the
+  sensor-to-LED map, saves the lighting's mode and colour at the first paint and puts them back on leaving).
+  The strip is written at most forty times a second, and once a second to undo whatever else painted (a mode
+  blink, a brightness key); not while calibrating or while a slider is shown. With the lights painted the
+  keymap's four-key blink for the mode is skipped: the lights are the sign. A board whose lights are switched
+  off stays dark and blinks as before. Id 27: get d[19] (bit 0 has them, bit 1 wanted, bit 2 painted now) and
+  d[20] (keys lit); set d[1] 2 turns them off or on (not stored). Not measured on a board: what a strip write
+  costs the scan rate and the 1 ms stream (DIAGNOSTICS shows the rate), and how the colours look through the
+  keycaps. A drum layout will light the same way once the drum machine exists: whatever has a role is lit.
 - Host tests: `run_synth` in `tests/host/run.py` (the piano by place whatever the keymap says, a strike, its
   velocity against its speed, pressure, the note's end, the octave keys, typing kept apart), `run_stream` (the
   moving stream: the first whole frame, the beat, a press as its own key, two keys in one report, the free
