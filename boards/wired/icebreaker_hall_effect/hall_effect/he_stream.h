@@ -13,5 +13,7 @@
 
 // 0 stops it, 1 asks for 125 frames a second, 2 for 250 (each frame is three reports on an endpoint
 // that carries one a millisecond, so 250 leaves one slot in four for the configurator's commands).
+// 3 asks for the keys that move only: each millisecond one report with the keys whose travel changed
+// (see he_stream.c), a whole frame four times a second to stand on, and a beat while nothing moves.
 void he_stream_set(uint8_t on);
 void he_stream_task(void);

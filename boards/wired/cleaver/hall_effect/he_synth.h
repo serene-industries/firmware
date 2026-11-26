@@ -1,9 +1,12 @@
 // The board as an instrument: a mode in which note keys send MIDI notes instead of typing.
 //
 // The mode is off at power-up and is entered and left on purpose: a key (the keymap's SYNTH keycode)
-// or the configurator toggles it. While it is on, a key whose base-layer keycode is a note key (the
-// tracker layout: Z X C V... and Q W E R... are the naturals, the row above each holds the sharps)
-// does not type; it plays. Every other key types as usual.
+// or the configurator toggles it. While it is on, the board carries a piano, by where a key sits and
+// not by what it types: the home row A to ' is the white keys from middle C, the row above holds the
+// black keys over the gaps a piano has them in (W E, T Y U, O P, ]), and Z and X move the octave down
+// and up. Those keys do not type; they play. Every other key types as usual.
+// (Until 1.0.6 / 0.4.2.16 the notes followed the base layer's keycodes in the tracker layout; a build
+// with this layout says so in d[18] of the get.)
 //
 // A note is struck between two depths. The time the key takes from the first depth to the second,
 // counted in scans and placed between scans from the two readings either side of each crossing, is
@@ -17,7 +20,8 @@
 //                  d[9] octave shift + 2 (0 to 4), d[10] 1 if pressure is sent,
 //                  d[11..12] notes started since power-up, d[13] the last note, d[14] its velocity,
 //                  d[15..16] the time between the two depths of that note in tenths of a millisecond,
-//                  d[17] 1 if this build has the MIDI interface (0: events are counted, not sent)
+//                  d[17] 1 if this build has the MIDI interface (0: events are counted, not sent),
+//                  d[18] the note layout: 1 the piano by place (0, older builds: the tracker layout by keycode)
 //   set  d[1] 0, d[2] 1 or 0            the mode on or off
 //   set  d[1] 1, d[2] first depth, d[3] second depth, d[4] release depth, d[5] channel,
 //        d[6] octave shift + 2, d[7] pressure 1 or 0     (0xFF leaves a value; the depths are kept
@@ -32,6 +36,8 @@
 #define HE_VAL_SYNTH 27
 #define HE_FEATURE_SYNTH       0x20   // HE_VAL_SYNTH, and the scan rate in HE_VAL_INFO d[7..8]
 #define HE_FEATURE_FAST_STREAM 0x40   // the stream's start value 2 asks for 250 frames a second
+#define HE_FEATURE_MOVING_STREAM 0x80 // the stream's start value 3: only the keys that move, each millisecond
+#define HE_SYNTH_LAYOUT_PIANO  1
 
 void     he_synth_scan_begin(void);   // once per scan: counts scans and works out the scan rate
 uint16_t he_scan_rate(void);          // scans per second, measured over the last half second

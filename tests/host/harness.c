@@ -82,8 +82,8 @@ int16_t adc_read(adc_mux mux) {
 }
 
 // ---- outputs with no meaning here
-static uint8_t  last_reports[8][32]; static int n_reports = 0;
-void raw_hid_send(uint8_t *data, uint8_t length) { if (n_reports < 8) memcpy(last_reports[n_reports++], data, length < 32 ? length : 32); }
+static uint8_t  last_reports[4096][32]; static uint32_t report_at[4096]; static int n_reports = 0;
+void raw_hid_send(uint8_t *data, uint8_t length) { if (n_reports < 4096) { report_at[n_reports] = host_now; memcpy(last_reports[n_reports++], data, length < 32 ? length : 32); } }
 void bootloader_jump(void) {}
 void start_slider_visualization(uint8_t value) { (void)value; }
 void start_calibration_rgb(void) {}
@@ -161,6 +161,11 @@ int main(int argc, char **argv) {
             }
         } else if (line[0] == 'X') {
             int n, ms; if (sscanf(line + 2, "%d %d", &n, &ms) == 2) { uint32_t t0 = host_now; for (int i = 0; i < n; i++) { host_now = t0 + (uint32_t)((long long)ms * (i + 1) / n); he_matrix_scan(); } }
+        } else if (line[0] == 'Y') {   // n milliseconds as the board lives them: a scan and the stream's task in each
+            int n = atoi(line + 2); for (int i = 0; i < n; i++) { host_now += 1; he_matrix_scan(); he_stream_task(); }
+        } else if (line[0] == 'H') {   // what was sent to the host since the last H, each with the millisecond it left in
+            for (int i = 0; i < n_reports; i++) { fprintf(stdout, "H %u", (unsigned)report_at[i]); for (int j = 0; j < 32; j++) fprintf(stdout, " %02x", last_reports[i][j]); fprintf(stdout, "\n"); }
+            fprintf(stdout, "H .\n"); n_reports = 0;
         } else if (line[0] == 'M') {
             fprintf(stdout, "M");
             for (int r = 0; r < MATRIX_ROWS; r++) fprintf(stdout, " %04x", (unsigned)matrix[r]);

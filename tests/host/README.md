@@ -28,6 +28,10 @@ on the Icebreaker HE and the Cleaver HE:
   100 % until the board is calibrated.
 - calibration as the configurator sees it: which keys moved, one key back,
   leaving without saving, keys not pressed keeping what they had.
+- the instrument mode: the piano laid over the board by a key's place, a
+  strike and its velocity, pressure, the octave keys, typing kept apart;
+- the stream of the keys that move (start value 3): what is sent, when, and
+  what is left out.
 
 To also compare every reply with the configurator's emulated board (the one
 its protocol tests run against), bundle its driver and pass it:

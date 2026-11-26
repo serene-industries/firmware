@@ -18,7 +18,6 @@ __attribute__((weak)) void he_synth_out(uint8_t kind, uint8_t channel, uint8_t n
 #endif
 
 extern const sensor_to_matrix_map_t sensor_to_matrix_map[];
-uint16_t dynamic_keymap_get_keycode(uint8_t layer, uint8_t row, uint8_t column);
 
 __attribute__((weak)) void he_synth_changed(bool on) {}
 
@@ -43,28 +42,32 @@ static uint8_t depth_a = 12, depth_b = 60, depth_rel = 30, channel = 0, octave =
 static uint16_t notes_started = 0, last_tenths = 0;
 static uint8_t  last_note = 0, last_velocity = 0;
 
-// ---- which key is which note: by the key's base-layer keycode, so it follows the user's keymap.
-// Semitones above C3 for HID usages 0x04 (A) to 0x38 (/); 0xFF = not a note key.
-#define X 0xFF
-static const uint8_t SEMITONE[0x39 - 0x04] = {
-    /* A  */ X, /* B */ 7, /* C */ 4, /* D */ 3, /* E */ 16, /* F */ X, /* G */ 6, /* H */ 8, /* I */ 24, /* J */ 10,
-    /* K  */ X, /* L */ 13, /* M */ 11, /* N */ 9, /* O */ 26, /* P */ 28, /* Q */ 12, /* R */ 17, /* S */ 1, /* T */ 19,
-    /* U  */ 23, /* V */ 5, /* W */ 14, /* X */ 2, /* Y */ 21, /* Z */ 0,
-    /* 1  */ X, /* 2 */ 13, /* 3 */ 15, /* 4 */ X, /* 5 */ 18, /* 6 */ 20, /* 7 */ 22, /* 8 */ X, /* 9 */ 25, /* 0 */ 27,
-    /* enter, esc, bksp, tab, space */ X, X, X, X, X,
-    /* -  */ X, /* = */ 30, /* [ */ 29, /* ] */ 31, /* \ */ X, /* non-us # */ X, /* ; */ 15, /* ' */ X, /* ` */ X,
-    /* ,  */ 12, /* . */ 14, /* / */ 16,
-};
-#undef X
+// ---- which key is which note: a piano laid over the board. A key's place decides (its matrix row and
+// column, the same on both boards), not what the key types, so the picture holds whatever the keymap is.
+// The home row, A to ', is the white keys from middle C. The row above holds the black keys, each over
+// the gap it has on a piano: W E, then T Y U, then O P, then ]. Q, R, I and [ sit where a piano has no
+// black key and go on typing. Z and X move the octave down and up. It is the layout the computer keyboard
+// has in Live and GarageBand, so a player who has used either knows it.
+#define NN 0xFF
+#define WHITE_ROW 2
+#define BLACK_ROW 1
+#define SHIFT_ROW 3
+#define SHIFT_DOWN_COL 1
+#define SHIFT_UP_COL 2
+static const uint8_t SYN_WHITE[] = {0, 2, 4, 5, 7, 9, 11, 12, 14, 16, 17};          // columns 1 to 11: C D E F G A B C D E F
+static const uint8_t SYN_BLACK[] = {NN, 1, 3, NN, 6, 8, 10, NN, 13, 15, NN, 18};    // columns 1 to 12: . C# D# . F# G# A# . C# D# . F#
 #define NO_NOTE 0xFF
-static uint8_t note_of[SENSOR_COUNT];
+enum { ROLE_NONE, ROLE_NOTE, ROLE_DOWN, ROLE_UP };
+static uint8_t note_of[SENSOR_COUNT], role_of[SENSOR_COUNT];
 
 static void map_notes(void) {
     for (uint8_t s = 0; s < SENSOR_COUNT; s++) {
-        uint16_t kc = dynamic_keymap_get_keycode(0, sensor_to_matrix_map[s].row, sensor_to_matrix_map[s].col);
-        uint8_t  st = (kc >= 0x04 && kc < 0x39) ? SEMITONE[kc - 0x04] : 0xFF;
-        int16_t  n  = st == 0xFF ? -1 : 48 + st + 12 * ((int16_t)octave - 2);
-        note_of[s]  = (n < 0 || n > 127) ? NO_NOTE : (uint8_t)n;
+        uint8_t r = sensor_to_matrix_map[s].row, c = sensor_to_matrix_map[s].col, st = NN;
+        if (r == WHITE_ROW && c >= 1 && c <= (uint8_t)sizeof(SYN_WHITE)) st = SYN_WHITE[c - 1];
+        if (r == BLACK_ROW && c >= 1 && c <= (uint8_t)sizeof(SYN_BLACK)) st = SYN_BLACK[c - 1];
+        int16_t n  = st == NN ? -1 : 60 + st + 12 * ((int16_t)octave - 2);
+        note_of[s] = (n < 0 || n > 127) ? NO_NOTE : (uint8_t)n;
+        role_of[s] = note_of[s] != NO_NOTE ? ROLE_NOTE : (r == SHIFT_ROW && c == SHIFT_DOWN_COL) ? ROLE_DOWN : (r == SHIFT_ROW && c == SHIFT_UP_COL) ? ROLE_UP : ROLE_NONE;
     }
 }
 
@@ -122,7 +125,7 @@ static void end_note(synth_key_t *k, uint8_t vel) {
 }
 
 bool he_synth_key(matrix_row_t current_matrix[], uint8_t s, uint8_t row, uint8_t col, uint16_t raw, bool *changed) {
-    if (!on || note_of[s] == NO_NOTE) return false;
+    if (!on || role_of[s] == ROLE_NONE) return false;
     synth_key_t *k = &key[s];
     if (current_matrix[row] & ((matrix_row_t)1 << col)) {   // it was down as a typing key when the mode came on
         current_matrix[row] &= ~((matrix_row_t)1 << col);
@@ -131,6 +134,19 @@ bool he_synth_key(matrix_row_t current_matrix[], uint8_t s, uint8_t row, uint8_t
 
     uint16_t t = fine(s, raw), a = depth_a * 10, b = depth_b * 10, rel = depth_rel * 10;
     uint32_t now = scans << 8;
+    if (role_of[s] != ROLE_NOTE) {
+        // An octave key: one step each time it passes the second depth, armed again above the release depth.
+        // Notes that sound keep the pitch they were started at and end there; the next strike is in the new octave.
+        if (!k->sent && k->prev < b && t >= b) {
+            k->sent = 1;
+            if (role_of[s] == ROLE_UP && octave < 4) { octave++; map_notes(); }
+            if (role_of[s] == ROLE_DOWN && octave > 0) { octave--; map_notes(); }
+        } else if (k->sent && t < rel) {
+            k->sent = 0;
+        }
+        k->prev = t;
+        return true;
+    }
     if (k->phase == 0 && k->prev < a && t >= a) {
         k->phase   = 1;
         k->cross_a = now - ago(k->prev, t, a);
@@ -206,6 +222,7 @@ void he_synth_get(uint8_t *d) {
     d[15] = last_tenths >> 8;
     d[16] = last_tenths & 0xFF;
     d[17] = HE_SYNTH_HAS_MIDI;
+    d[18] = HE_SYNTH_LAYOUT_PIANO;
 }
 
 void he_synth_set(uint8_t *d) {

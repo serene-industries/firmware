@@ -110,7 +110,7 @@ void via_he_config_set_value(uint8_t *data) {
 
     switch (value_id) {
         case id_set_live_stream: {
-            he_stream_set(value_data);   // 1: 125 frames a second, 2: 250
+            he_stream_set(value_data);   // 1: 125 frames a second, 2: 250, 3: the keys that move, each millisecond
             break;
         }
         case id_he_synth: {

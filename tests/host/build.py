@@ -21,7 +21,7 @@ block = src[start:i + 1]
 decl = re.search(r'static uint16_t last_eeprom_write_timer = 0;', src).group(0)
 gen = os.path.join(os.path.dirname(out), os.path.basename(out) + '_housekeeping.c')
 open(gen, 'w').write('// lifted from %s by build.py\n#include "host.h"\n#include "he_switch_matrix.h"\n%s\nvoid host_housekeeping_save(void) {\n    %s\n}\n' % (km, decl, block))
-flags = ['-fcommon', '-O1', '-Wall', '-Wno-unused-variable', '-Wno-unused-function', '-Wno-unused-but-set-variable', '-DVIA_ENABLE',
+flags = ['-fcommon', '-O1', '-Wall', '-Wno-unused-variable', '-Wno-unused-function', '-Wno-unused-but-set-variable', '-DVIA_ENABLE', '-DRAW_ENABLE',
          '-include', os.path.join(B, 'config.h'), '-include', os.path.join(B, 'keymaps/via/config.h'), '-I' + os.path.join(here, 'stubs'), '-I' + B]
 if uid:
     flags += ['-I' + os.path.join(here, 'stubs_uid'), '-DHOST_HAS_HARDWARE_ID']

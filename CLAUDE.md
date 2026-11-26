@@ -103,12 +103,19 @@
   emulated board answers every packet as this source does. Run it before any
   HE release; it proves the logic, not the MCU.
 
-## The instrument mode (branch work, test builds Icebreaker HE 1.0.6 / Cleaver HE 0.4.2.16, 2026-11-25; unseen on a board)
+## The instrument mode (branch work; BETA builds Icebreaker HE 1.0.7 / Cleaver HE 0.4.2.17, 2026-11-26, unseen on a board; the owner played 1.0.6 on an Icebreaker HE)
 
 - `he_synth.c` / `he_synth.h` in each HE board folder (identical, in `SRC`). Off at power-up; the keycode SYNTH
-  (QK_KB_9, on the function layer beside the mode keys) or VIA value id 27 switches it. While on, a key whose
-  base-layer keycode is a note key (tracker layout: Z row and Q row naturals, sharps on the row above each)
-  does not type: `he_matrix_scan` hands it to `he_synth_key` and skips the typing path. Every other key types.
+  (QK_KB_9, on the function layer beside the mode keys) or VIA value id 27 switches it. While on, the board
+  carries a piano, by where a key sits (matrix row and column, the same on both boards) and not by what it types:
+  the home row A to ' is the white keys from middle C (60), the row above holds the black keys over the gaps a
+  piano has them in (W E, T Y U, O P, ]), and Z and X step the octave down and up (one step a press, a note
+  that sounds keeps its pitch). Those keys do not type: `he_matrix_scan` hands them to `he_synth_key` and skips
+  the typing path. Every other key types. The owner, of the first builds' tracker layout by keycode (two manuals,
+  1.0.6 / 0.4.2.16): "the notes need to be positioned like on the piano, otherwise the placement makes no sense"
+  and "the closest to a visual overlay as if a piano was projected onto the keyboard; people need to have an
+  intuitive sense of how to play it immediately". It is also the layout Live and GarageBand give a computer
+  keyboard. A build says which layout it has in d[18] of the id 27 get (1 the piano, 0 the older builds).
 - Velocity is the time from the first depth to the second (12 % and 60 %), counted in scans and placed between
   scans from the readings either side of each crossing; converted with the measured scan rate; 2 ms and under is
   127, 80 ms and over is 1. Past the second depth travel is polyphonic pressure (a hundred a second per key at
@@ -121,5 +128,17 @@
   that on a board yet, which is why it is a test build.
 - The scan rate is measured (`he_synth_scan_begin`, half-second windows) and reported in info d[7..8] and in id 27.
 - The stream's start value 2 asks for 250 frames a second (4 ms); 1 is 125 as before.
-- Host tests: `run_synth` in `tests/host/run.py` (a strike, its velocity against its speed, pressure, the note's
-  end, typing kept apart), and the comparison with the configurator's emulated board covers id 27 and the notes.
+- **Start value 3 is the keys that move** (`moving_task` in `he_stream.c`, feature bit 0x80): a whole frame is
+  three reports on an endpoint that carries one a millisecond, so whole frames stop near 330 a second. This sends
+  one report a millisecond (id 0xF1: sequence, the board's clock in ms, up to 13 pairs of matrix index and
+  travel) with only the keys whose travel changed by two steps or more since they were last sent, a whole frame
+  four times a second to stand on, a report with no keys every 16 ms while nothing moves, and one millisecond in
+  eight left free for the configurator's commands (so 875 reports a second at most; never fill the endpoint, the
+  commands share it). The owner asked for it ("the stream is 200-something frames per sec instead of a higher
+  rate that we discussed"). Not measured on a board: what it does to the scan rate (DIAGNOSTICS shows the rate).
+- Host tests: `run_synth` in `tests/host/run.py` (the piano by place whatever the keymap says, a strike, its
+  velocity against its speed, pressure, the note's end, the octave keys, typing kept apart), `run_stream` (the
+  moving stream: the first whole frame, the beat, a press as its own key, two keys in one report, the free
+  millisecond, a one-step flicker not sent, stopping by itself), and the comparison with the configurator's
+  emulated board covers id 27, the notes and the octave keys. The host build now compiles the stream code
+  (`-DRAW_ENABLE`); before 2026-11-26 `he_stream.c` was built as empty stubs there and nothing tested it.
