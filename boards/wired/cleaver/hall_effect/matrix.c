@@ -7,6 +7,7 @@
 #include "gpio.h"
 #include "he_stream.h"
 #include "he_midi.h"
+#include "he_synth.h"
 #include "he_perkey.h"
 #include <string.h>
 
