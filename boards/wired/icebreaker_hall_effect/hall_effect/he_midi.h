@@ -55,6 +55,8 @@ void he_midi_in(uint8_t b0, uint8_t b1, uint8_t b2);   // a realtime byte or a s
 bool he_midi_is_control(uint8_t sensor);
 void he_midi_control(uint8_t sensor, uint16_t travel); // that key's travel, tenths of a percent
 bool he_midi_quiet(void);            // the board's own notes are kept in
+bool he_midi_running(void);          // the DAW's clock is running
+uint32_t he_midi_tick(void);         // the last tick's number since the song's start, 24 a quarter note
 void he_midi_get(uint8_t *d);
 void he_midi_set(uint8_t *d);
 // Where the events go. With the MIDI interface: to it. Without (and on a host): a weak stand-in.

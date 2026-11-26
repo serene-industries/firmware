@@ -23,11 +23,15 @@
 //                  d[17] 1 if this build has the MIDI interface (0: events are counted, not sent),
 //                  d[18] the note layout: 1 the piano by place (0, older builds: the tracker layout by keycode)
 //                  d[19] the lights: bit 0 this build has them, bit 1 they are wanted, bit 2 they are painted now,
-//                  d[20] how many keys are lit (0 while they are not painted)
+//                  d[20] how many keys are lit (0 while they are not painted);
+//                  d[19] also: bit 3 this build knows the drum layout, bit 4 that layout is on now; d[21] the drum step being played, from 1 (0 none)
 //   set  d[1] 0, d[2] 1 or 0            the mode on or off
 //   set  d[1] 1, d[2] first depth, d[3] second depth, d[4] release depth, d[5] channel,
 //        d[6] octave shift + 2, d[7] pressure 1 or 0     (0xFF leaves a value; the depths are kept
 //        apart: first 5 to 50, second at least 10 past it and at most 90, release under the second)
+//   set  d[1] 3, d[2] 1 or 0, d[3] n, then n pairs (row, column), at most six     the drum layout on or off, and the keys beside the pads and steps that belong to it
+//   set  d[1] 4, d[2] hue, d[3] the pad in hand (0 to 10, 0xFF none), d[4..19] sixteen steps: level 0 to 100, with 0x80 if the step holds a value of its own
+//   set  d[1] 5, d[2] 0 stopped, 1 on the DAW's clock, 2 own; own: d[3..4] the board's clock (low 16 bits, high byte first) when step 0 was, d[5..6] ms a step lasts times 16
 //   set  d[1] 2, d[2] 1 or 0            the lights: only the instrument's keys while the mode is on (the default), or the lighting as it is
 // Nothing here is stored: the settings are the defaults again after a power cycle.
 #pragma once
@@ -68,4 +72,5 @@ void he_synth_out(uint8_t kind, uint8_t channel, uint8_t note, uint8_t value);
 #define HE_LIGHT_CONTROL 3    // an octave key, or a key the configurator made a control
 #define HE_LIGHT_DOWN    0x80
 bool he_lights_paint(const uint8_t *kinds);   // false: the lights are off or busy, and nothing was painted
+bool he_lights_paint_hsv(const uint8_t *hsv); // the same for the drum layout: three bytes a sensor, hue, saturation, and brightness as a share (0 to 255) of the brightness the lights had
 void he_lights_end(void);                     // the lighting as it was before the first paint

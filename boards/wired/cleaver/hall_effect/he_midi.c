@@ -72,6 +72,8 @@ void he_midi_in(uint8_t b0, uint8_t b1, uint8_t b2) {
     }
 }
 
+bool he_midi_running(void) { return running; }
+uint32_t he_midi_tick(void) { return tick_no; }
 static uint8_t flags(uint32_t now) { return (running ? 1 : 0) | ((seen && now - seen_at < 1000) ? 2 : 0); }
 
 static void report(uint32_t now) {

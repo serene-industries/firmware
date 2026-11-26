@@ -316,7 +316,7 @@ void end_slider_visualization(void) {
 static bool    synth_lights_held = false;
 static uint8_t synth_lights_mode;
 static HSV     synth_lights_hsv;
-bool he_lights_paint(const uint8_t *kinds) {
+static bool synth_lights_begin(void) {
     if (!rgblight_is_enabled() || slider_visualization_active) return false;
     if (!synth_lights_held) {
         synth_lights_mode = rgblight_get_mode();
@@ -324,6 +324,16 @@ bool he_lights_paint(const uint8_t *kinds) {
         rgblight_mode_noeeprom(RGBLIGHT_MODE_STATIC_LIGHT);
         synth_lights_held = true;
     }
+    return true;
+}
+bool he_lights_paint_hsv(const uint8_t *hsv) {   // the drum layout: a colour a key, its brightness a share of the brightness the lights had
+    if (!synth_lights_begin()) return false;
+    for (uint8_t s = 0; s < SENSOR_COUNT; s++) rgblight_sethsv_at(hsv[s * 3], hsv[s * 3 + 1], (uint8_t)(((uint16_t)synth_lights_hsv.v * hsv[s * 3 + 2]) / 255), sensor_to_led_map[s]);
+    rgblight_set();
+    return true;
+}
+bool he_lights_paint(const uint8_t *kinds) {
+    if (!synth_lights_begin()) return false;
     uint8_t full = synth_lights_hsv.v, rest = (uint8_t)(((uint16_t)full * 2) / 5), dim = (uint8_t)(full / 6);
     for (uint8_t s = 0; s < SENSOR_COUNT; s++) {
         bool    down = (kinds[s] & HE_LIGHT_DOWN) != 0;

@@ -525,22 +525,54 @@ def run_synth(board, title):
     L = o.lights
     check('lights: nothing is painted while the mode is off', L[0][0] == 0 and L[0][1] == 0, str(L[0]))
     check('lights: with the mode on the white keys, the black keys and the two octave keys are lit and every other key is dark', L[1][0] == 1 and L[1][3] == want, L[1][3] + ' wanted ' + want)
-    check('lights: the board says so (has them, wanted, painted; 21 keys lit)', gets(o)[0][21] == 7 and gets(o)[0][22] == 21, str(gets(o)[0][21:23]))
+    check('lights: the board says so (has them, wanted, painted; 21 keys lit)', gets(o)[0][21] == 15 and gets(o)[0][22] == 21, str(gets(o)[0][21:23]))
     down = want[:A] + 'W' + want[A + 1:]
     check('lights: A held is bright, and back as it was when it comes up', L[2][3] == down and L[3][3] == want, L[2][3])
     ctl = want[:SPACE] + 'c' + want[SPACE + 1:]
     check('lights: a key the configurator makes a control lights up as one (22 lit)', L[4][3] == ctl and gets(o)[1][22] == 22, L[4][3])
     check('lights: three seconds with nothing moving write the strip about once a second, not every scan (%d writes)' % (L[5][1] - L[4][1]), 2 <= L[5][1] - L[4][1] <= 4, str([L[4][1], L[5][1]]))
-    check('lights: the mode off puts the old lighting back, once', L[6][0] == 0 and L[6][2] == 1 and gets(o)[2][21] == 3 and gets(o)[2][22] == 0, str([L[6], gets(o)[2][21:23]]))
+    check('lights: the mode off puts the old lighting back, once', L[6][0] == 0 and L[6][2] == 1 and gets(o)[2][21] == 11 and gets(o)[2][22] == 0, str([L[6], gets(o)[2][21:23]]))
     seq = [ON]
     for _ in range(40): seq += ['P %d 400' % A, 'Y 5', 'P %d 0' % A, 'Y 5']
     o = boot(binary, ee, WARM + seq + ['G'])
     check('lights: a key hammered eighty times in 400 ms writes the strip at most forty times a second (%d writes)' % o.lights[0][1], o.lights[0][1] <= 18, str(o.lights[0][1]))
     o = boot(binary, ee, WARM + [ON, S(SET, 0, 27, 2, 0), 'G', GETS, 'Y 1200', 'G', S(SET, 0, 27, 2, 1), 'G', GETS, OFF])
     check('lights: turned off from the configurator the old lighting is back while the mode stays on, and nothing repaints; turned on they are painted again',
-          o.lights[0][0] == 0 and o.lights[0][2] == 1 and gets(o)[0][21] == 1 and o.lights[1][1] == o.lights[0][1] and o.lights[2][0] == 1 and gets(o)[1][21] == 7, str([o.lights, gets(o)[0][21], gets(o)[1][21]]))
+          o.lights[0][0] == 0 and o.lights[0][2] == 1 and gets(o)[0][21] == 9 and o.lights[1][1] == o.lights[0][1] and o.lights[2][0] == 1 and gets(o)[1][21] == 15, str([o.lights, gets(o)[0][21], gets(o)[1][21]]))
     o = boot(binary, ee, WARM + [S(SET, 0, 4), 'T 50', ON, 'G', 'Y 1500', 'G'])   # calibration paints the keys itself
     check('lights: while the board is calibrating the instrument does not repaint over it', o.lights[1][1] == o.lights[0][1], str(o.lights))
+
+    # the drum layout: its keys neither type nor play, Z is a pad and not an octave key, and the four lights each take one property
+    hsv = lambda L: [tuple(int(L[3][2 + k * 6 + q * 2: 4 + k * 6 + q * 2], 16) for q in range(3)) for k in range(len(at))]
+    C_, V_, S2, G_ = at[(3, 3)], at[(3, 4)], at[(2, 2)], at[(2, 5)]
+    step = lambda i: at[(i // 4, 7 + i % 4)]
+    TOP = at[(0, 15)] if (0, 15) in at else at[(0, 14)]
+    toprc = (0, 15) if (0, 15) in at else (0, 14)
+    DR_ON = S(SET, 0, 27, 3, 1, 1, toprc[0], toprc[1]); DR_OFF = S(SET, 0, 27, 3, 0, 0)
+    steps = [100, 0, 0, 40 | 0x80] + [0] * 12
+    o = boot(binary, ee, KEYS + WARM + [ON, DR_ON, 'Y 30', GETS] + strike(Z, 8) + strike(C_, 8) + strike(step(5), 8) + strike(G_, 8) + ['X 20 20', 'M', 'E', GETS] + up(Z) + up(C_) + up(step(5)) + up(G_) +
+             [S(SET, 0, 27, 4, 46, 2, *steps), 'Y 40', 'G', 'P %d 600' % C_, 'Y 40', 'G', 'P %d 0' % C_, DR_OFF, 'Y 40', 'G', GETS] + strike(A, 8) + ['E'])
+    g = gets(o)
+    check('drums: the board says it knows the layout and that it is on', g[0][21] & 8 and g[0][21] & 16 and g[0][4] == 1, str(g[0][21]))
+    check('drums: a pad (Z, C) and a step key do not type and play no note, Z steps no octave, and a key outside the layout (G) types again', bit(o.matrices[0], (3, 1)) == 0 and bit(o.matrices[0], (3, 3)) == 0 and bit(o.matrices[0], (1, 8)) == 0 and bit(o.matrices[0], (2, 5)) == 1 and not [e for e in o.events[:0]] and g[1][11] == 2 and g[1][13] * 256 + g[1][14] == 0, str([o.matrices[0], g[1][11], g[1][13:15]]))
+    H = hsv(o.lights[0])
+    check('drum lights: a pad is its voice\'s colour (kick red, snare, the hat), the pad in hand brighter, the free pad dark', H[Z] == (0, 255, 70) and H[C_] == (46, 255, 150) and H[at[(2, 1)]] == (93, 255, 70) and H[S2][2] == 0 and H[at[(1, 4)]][0] == 232, str([H[Z], H[C_], H[S2]]))
+    check('drum lights: a step is the colour of the voice in hand and as bright as its level; one with a value of its own is paler; a beat\'s first step is marked; the rest are dark',
+          H[step(0)] == (46, 255, 255) and H[step(3)] == (46, 110, 40 + 40 * 215 // 100) and H[step(4)] == (0, 0, 18) and H[step(1)][2] == 0 and H[G_][2] == 0, str([H[step(0)], H[step(3)], H[step(4)], H[step(1)]]))
+    check('drum lights: a key named by the configurator is dim, and a held pad is at full brightness', H[TOP] == (0, 0, 30) and hsv(o.lights[1])[C_] == (46, 255, 255), str([H[TOP], hsv(o.lights[1])[C_]]))
+    check('drums off: the piano is back, lights and notes (A is middle C)', o.lights[2][3] == want and not (g[2][21] & 16) and [e[:3] for e in o.events if e[0] == 'on'][-1:] == [('on', 0, 60)], str([o.lights[2][3][:40], g[2][21], o.events[-2:]]))
+    # the running light: on the DAW's clock it is where the song is; on its own clock where the time says
+    o = boot(binary, ee, WARM + [ON, DR_ON, S(SET, 0, 27, 4, 0, 0, *steps), S(SET, 0, 27, 5, 1), 'Y 40', 'G', GETS, 'C fa'] + ['C f8', 'Y 20'] * 7 + ['Y 40', 'G', GETS] + ['C f8', 'Y 20'] * 6 + ['Y 40', 'G', 'C fc', 'Y 40', 'G', GETS])
+    g = gets(o); L = o.lights
+    white = lambda q: [i for i in range(16) if hsv(q)[step(i)] == (0, 0, 255)]
+    check('running light on the DAW\'s clock: none before the start; after seven ticks it is on step 2; after thirteen on step 3; none after the stop (%s %s %s %s)' % (white(L[0]), white(L[1]), white(L[2]), white(L[3])),
+          white(L[0]) == [] and white(L[1]) == [1] and white(L[2]) == [2] and white(L[3]) == [] and g[0][23] == 0 and g[1][23] == 2 and g[2][23] == 0, str([white(L[0]), white(L[1]), white(L[2]), white(L[3]), g[0][23], g[1][23]]))
+    o = boot(binary, ee, WARM + [ON, DR_ON, S(SET, 0, 27, 4, 0, 0, *steps), 'Z'])
+    t0 = o.nows[0] & 0xFFFF
+    o = boot(binary, ee, WARM + [ON, DR_ON, S(SET, 0, 27, 4, 0, 0, *steps), S(SET, 0, 27, 5, 2, t0 >> 8, t0 & 255, (125 * 16) >> 8, (125 * 16) & 255), 'Y 60', 'G', 'Y 125', 'G', 'Y 250', 'G', 'Y 1500', 'G', 'G'])
+    L = o.lights
+    check('running light on its own clock (a step every 125 ms from the time given): step 1, then 2, then 4, then 16 (%s %s %s %s), written once a step' % (white(L[0]), white(L[1]), white(L[2]), white(L[3])),
+          white(L[0]) == [0] and white(L[1]) == [1] and white(L[2]) == [3] and white(L[3]) == [15] and 10 <= L[3][1] - L[2][1] <= 14, str([white(q) for q in L[:4]] + [L[3][1] - L[2][1]]))
 
 def run_stream(board, title):
     """The stream of the keys that move: a whole frame to stand on, then one report a millisecond holding only what changed."""

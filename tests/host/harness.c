@@ -91,8 +91,10 @@ void he_midi_out(uint8_t status, uint8_t d1, uint8_t d2) { if (n_out < 2048) { o
 void bootloader_jump(void) {}
 // the instrument's lights: what the mode last painted, a letter a sensor (. off, w white key, b black key, c control; a capital while the key is down)
 static char lights_now[SENSOR_COUNT + 1]; static int lights_painted = 0, lights_writes = 0, lights_ended = 0;
-bool he_lights_paint(const uint8_t *kinds) { for (int i = 0; i < SENSOR_COUNT; i++) { char c = ".wbc"[kinds[i] & 3]; lights_now[i] = (kinds[i] & HE_LIGHT_DOWN) && c != '.' ? (char)(c - 32) : c; } lights_painted = 1; lights_writes++; return true; }
+static uint8_t lights_hsv[SENSOR_COUNT * 3]; static int lights_by_hsv = 0;   // the drum layout paints colours
+bool he_lights_paint(const uint8_t *kinds) { lights_by_hsv = 0; for (int i = 0; i < SENSOR_COUNT; i++) { char c = ".wbc"[kinds[i] & 3]; lights_now[i] = (kinds[i] & HE_LIGHT_DOWN) && c != '.' ? (char)(c - 32) : c; } lights_painted = 1; lights_writes++; return true; }
 void he_lights_end(void) { lights_painted = 0; lights_ended++; }
+bool he_lights_paint_hsv(const uint8_t *hsv) { memcpy(lights_hsv, hsv, sizeof(lights_hsv)); lights_painted = 1; lights_by_hsv = 1; lights_writes++; return true; }
 void start_slider_visualization(uint8_t value) { (void)value; }
 void start_calibration_rgb(void) {}
 void end_calibration_visual(void) {}
@@ -195,7 +197,8 @@ int main(int argc, char **argv) {
             for (int p = 0; p < HE_CANCEL_PAIRS; p++) fprintf(stdout, "PAIR %d %d %d\n", p, he_pairs[p].a, he_pairs[p].b);
             fprintf(stdout, "CAL %d\n", he_config.he_calibration_mode ? 1 : 0);
         } else if (line[0] == 'G') {   // the lights: painted or not, how often the strip was written, how often the old lighting was put back, and each sensor's light
-            fprintf(stdout, "G %d %d %d %s\n", lights_painted, lights_writes, lights_ended, lights_painted ? lights_now : "-");
+            if (lights_painted && lights_by_hsv) { fprintf(stdout, "G %d %d %d H:", lights_painted, lights_writes, lights_ended); for (int i = 0; i < SENSOR_COUNT * 3; i++) fprintf(stdout, "%02x", lights_hsv[i]); fprintf(stdout, "\n"); }
+            else fprintf(stdout, "G %d %d %d %s\n", lights_painted, lights_writes, lights_ended, lights_painted ? lights_now : "-");
         } else if (line[0] == 'V') {
             int s = atoi(line + 2);
             fprintf(stdout, "V %d %d\n", s, he_live_travel[sensor_to_matrix_map[s].row][sensor_to_matrix_map[s].col]);

@@ -103,7 +103,7 @@
   emulated board answers every packet as this source does. Run it before any
   HE release; it proves the logic, not the MCU.
 
-## The instrument mode (branch work; BETA builds up to Icebreaker HE 1.0.9 / Cleaver HE 0.4.2.19, 2026-11-26, unseen on a board; the owner played 1.0.6 and 1.0.7 on an Icebreaker HE)
+## The instrument mode (branch work; BETA builds up to Icebreaker HE 1.0.10 / Cleaver HE 0.4.2.20, 2026-11-26, unseen on a board; the owner played 1.0.6 and 1.0.7 on an Icebreaker HE)
 
 - `he_synth.c` / `he_synth.h` in each HE board folder (identical, in `SRC`). Off at power-up; the keycode SYNTH
   (QK_KB_9, on the function layer beside the mode keys) or VIA value id 27 switches it. While on, the board
@@ -166,6 +166,22 @@
   d[20] (keys lit); set d[1] 2 turns them off or on (not stored). Not measured on a board: what a strip write
   costs the scan rate and the 1 ms stream (DIAGNOSTICS shows the rate), and how the colours look through the
   keycaps. A drum layout will light the same way once the drum machine exists: whatever has a role is lit.
+- **The drum layout and its lights** (BETA builds Icebreaker HE 1.0.10 / Cleaver HE 0.4.2.20, 2026-11-26, unseen
+  on a board; the owner picked all four of a drum machine's light habits, "everything listed if they don't
+  conflict", and asked why the lights were not built with the drum machine). The drum machine itself lives in
+  the configurator; the board only needs to know its keys and show its lights. Id 27 set d[1] 3 turns the
+  layout on or off: pads at rows 3, 2, 1, columns 1 to 4, steps at rows 0 to 3, columns 7 to 10, and up to six
+  more keys the configurator names. While it is on those keys neither type nor play (`ROLE_DRUM`), the piano is
+  off, and Z and X step no octave. The lights each take one property, so none hides another
+  (`lights_paint_drums`, painted by `he_lights_paint_hsv` in the rgb files): a pad is its voice's colour
+  (`DR_HUE`, round the wheel; the pad in hand brighter, a held pad full), a step with a hit is the colour of the
+  voice in hand and as bright as its level, paler (saturation 110) if it holds a value of its own, the first
+  step of a beat is marked faintly, and the step being played is full white. **The board moves that running
+  light itself** (`drum_now`): on the DAW's clock (`he_midi_tick() / 6`), or from a board-clock time and a step
+  length the configurator gave (set d[1] 5), so it is right when the browser is busy. Set d[1] 4 carries the
+  voice in hand and its sixteen steps. The get says bit 3 of d[19] (knows the layout), bit 4 (it is on) and
+  d[21] (the step the light is on, from 1). The mode going off turns the layout off. Not known: how eleven
+  hues look through the keycaps, and what a strip write a sixteenth note costs the scan rate.
 - Host tests: `run_synth` in `tests/host/run.py` (the piano by place whatever the keymap says, a strike, its
   velocity against its speed, pressure, the note's end, the octave keys, typing kept apart), `run_stream` (the
   moving stream: the first whole frame, the beat, a press as its own key, two keys in one report, the free
