@@ -103,7 +103,13 @@
   emulated board answers every packet as this source does. Run it before any
   HE release; it proves the logic, not the MCU.
 
-## The instrument mode (branch work; BETA builds up to Icebreaker HE 1.0.10 / Cleaver HE 0.4.2.20, 2026-11-26, unseen on a board; the owner played 1.0.6 and 1.0.7 on an Icebreaker HE)
+## The instrument mode (branch work; BETA builds up to Icebreaker HE 1.0.10 / Cleaver HE 0.4.2.20, 2026-11-26; the owner played 1.0.6 and 1.0.7, and runs 1.0.10, on an Icebreaker HE; the Cleaver builds are unseen on a board)
+
+- **On the owner's Icebreaker HE, 1.0.10, 2026-11-27** (from the configurator's DIAGNOSTICS line): the board
+  enumerates as keyboard + raw HID + MIDI and the browser hears its notes (13 of 13); the moving stream runs at
+  1 ms steps with no update missed; the bridge holds its seven control keys with nothing dropped; the lights
+  report 28 keys painted; the scan rate reads 952 a second with the mode on. Not known from it: how the lights
+  look, the drum layout on the board, the scan rate with the mode off, anything with a DAW.
 
 - `he_synth.c` / `he_synth.h` in each HE board folder (identical, in `SRC`). Off at power-up; the keycode SYNTH
   (QK_KB_9, on the function layer beside the mode keys) or VIA value id 27 switches it. While on, the board
