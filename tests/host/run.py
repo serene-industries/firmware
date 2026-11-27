@@ -821,6 +821,42 @@ def run_bridge(board, title):
     o = boot(binary, ee, WARM + [ON] + strike(A, 8) + ['Y 20', 'E', S(SET, 0, 28, 4, 1), 'E', 'P %d 0' % A, 'Y 20', 'E'])
     check('kept in while a note sounds: the note is ended first, so nothing is left on in the DAW', [e[0] for e in o.events if e[0] != 'pr'] == ['on', 'off'], str(o.events))
 
+def run_hotswap():
+    """The Icebreaker Hotswap is a plain VIA board; the one piece of code of its own is what it answers on the custom
+    channel: what it is and which board it is. That block of its keymap is compiled here as it stands."""
+    print('== Icebreaker Hotswap (board id)')
+    src = open(os.path.join(here, '..', '..', 'boards', 'wired', 'icebreaker_hotswap', 'keymaps', 'via', 'keymap.c')).read()
+    a, b = src.index('// ---- board id: begin'), src.index('// ---- board id: end')
+    inc = os.path.join(tmp, 'hs'); os.makedirs(inc, exist_ok=True)
+    open(os.path.join(inc, 'hs_block.inc'), 'w').write(src[a:b])
+    def build(with_id):
+        out = os.path.join(tmp, 'hs_id' if with_id else 'hs_noid')
+        cmd = ['gcc', '-std=gnu11', '-Wall', '-Werror', '-I', inc] + (['-I', os.path.join(here, 'stubs_uid')] if with_id else []) + [os.path.join(here, 'hs_harness.c')] + ([os.path.join(here, 'stubs_uid', 'hardware_id.c')] if with_id and os.path.exists(os.path.join(here, 'stubs_uid', 'hardware_id.c')) else []) + ['-o', out]
+        r = subprocess.run(cmd, capture_output=True, text=True)
+        if r.returncode != 0: raise RuntimeError('hotswap harness: ' + r.stderr[-600:])
+        return out
+    def ask(binary, packets):
+        r = subprocess.run([binary], input='\n'.join('S ' + ' '.join('%02x' % x for x in p) for p in packets) + '\n', capture_output=True, text=True, timeout=20)
+        return [[int(x, 16) for x in ln.split()[1:]] for ln in r.stdout.splitlines() if ln.startswith('R')]
+    packets = [[GET, 0, 22], [GET, 0, 25], [GET, 0, 23, 2, 1], [SET, 0, 22, 9], [GET, 3, 1], [0x09, 0], [GET, 0, 1]]
+    fw = ask(build(True), packets)
+    check('Hotswap: asked what it is, it says protocol 1, no Hall sensors, a 5 x 15 matrix and that it has an ID', fw[0][:8] == [GET, 0, 22, 1, 0, 5, 15, 4], str(fw[0][:9]))
+    check('Hotswap: asked which board it is, it gives its ID in twelve bytes, not all zero', fw[1][:3] == [GET, 0, 25] and len(fw[1][3:15]) == 12 and any(fw[1][3:15]), str(fw[1][:16]))
+    check('Hotswap: every other question on the custom channel, a set, a save and another channel are left unhandled', all(r[0] == 0xFF for r in fw[2:]), str([r[0] for r in fw[2:]]))
+    no = ask(build(False), packets)
+    check('Hotswap built with no hardware ID: it says so, and the ID is zeros', no[0][:8] == [GET, 0, 22, 1, 0, 5, 15, 0] and not any(no[1][3:15]), str([no[0][:8], no[1][:16]]))
+    if emu:
+        uid = fw[1][3:15]
+        sensors = [[r, c] for r in range(5) for c in range(15)]
+        opts = dict(name='Icebreaker HS', vendorId=0x5363, productId=0x6503, rows=5, cols=15, sensors=sensors, defaultPair=[0, 1], perKey=False, uid=uid, version=[1, 0, 2, 0], plain=dict(boardId=True), lightChannel=3)
+        ask_emu = [p for p in packets if not (p[0] in (SET, GET) and p[1] == 3) and p[0] != 0x09]   # the lighting channel and the save are the core's, not this block's
+        job = os.path.join(tmp, 'hs.job.json'); json.dump(dict(options=opts, script=[('S', p) for p in ask_emu]), open(job, 'w'))
+        r = subprocess.run(['node', emu, job], capture_output=True, text=True, timeout=60)
+        em = [[int(x, 16) for x in ln.split()[1:]] for ln in r.stdout.splitlines() if ln.startswith('R')]
+        want = [fw[packets.index(p)] for p in ask_emu]
+        check('Hotswap: the configurator\'s emulated board answers these packets as the firmware does (%d)' % len(want), em == want, str([(a_[:8], b_[:8]) for a_, b_ in zip(want, em) if a_ != b_][:3]) + r.stderr[-200:])
+
+run_hotswap()
 run_board('icebreaker_hall_effect', 'Icebreaker HE')
 run_synth('icebreaker_hall_effect', 'Icebreaker HE')
 run_stream('icebreaker_hall_effect', 'Icebreaker HE')

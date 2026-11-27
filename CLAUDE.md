@@ -103,6 +103,22 @@
   emulated board answers every packet as this source does. Run it before any
   HE release; it proves the logic, not the MCU.
 
+## The Icebreaker Hotswap says which board it is (BETA build icebreaker-hs-v1.0.2, 2026-11-27, unseen on a board)
+
+- The owner, 2026-11-27: "can we apply the same macros + saving configs features + anything else relevant besides
+  the HE stuff to the other keyboard fw we have?" The Hotswap (RP2040, QMK, VIA keymap) already had macros (VIA's
+  own, 16 slots) and the reboot into its bootloader from the configurator. What it lacked: it could not tell the
+  configurator which keyboard it was, so its backups were kept for the model and a restore after an update had to
+  be asked about.
+- `keymaps/via/keymap.c` (the only place this board has code of its own, and it is compiled) now answers two
+  questions on VIA's custom channel, with the bytes the HE boards use (`he_perkey.h`): value id 22 (protocol 1,
+  0 sensors, rows, columns, feature 0x04 "has an ID") and 25 (the MCU's unique ID, the RP2040's flash ID, eight
+  bytes of the twelve). Everything else on that channel stays "unhandled", as before.
+- `tests/host/run.py` compiles that block as it stands (`hs_harness.c`, cut out between the two marks in the
+  keymap) and checks its answers, and that the configurator's emulated Hotswap gives the same.
+- Nothing about the stored layout changes. Like every QMK build of another day, flashing it erases the keymap
+  and the macros; the configurator backs them up and writes them back (see si-configurator's CLAUDE.md).
+
 ## The instrument mode (branch work; BETA builds up to Icebreaker HE 1.0.12 / Cleaver HE 0.4.2.22, 2026-11-27; the owner played 1.0.6 and 1.0.7, and runs 1.0.10, on an Icebreaker HE; the Cleaver builds are unseen on a board)
 
 - **On the owner's Icebreaker HE, 1.0.10, 2026-11-27** (from the configurator's DIAGNOSTICS line): the board

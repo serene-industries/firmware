@@ -19,6 +19,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "raw_hid.h"
 #include "wait.h"
 #include "bootloader.h"
+#include <string.h>
 
 // The fork's quantum/via.c dropped the standard id_bootloader_jump (0x0B)
 // handler; restore it at the keyboard level so the configurator can reboot
@@ -32,6 +33,54 @@ bool via_command_kb(uint8_t *data, uint8_t length) {
     }
     return false;
 }
+
+// ---- board id: begin (tests/host/run.py compiles this block as it stands)
+// What the board is, and which one it is, for the configurator: the same two questions the Hall-effect boards
+// answer (he_perkey.h there), on VIA's custom channel, so one piece of the configurator reads every wired board.
+//   get, value id 22 -> d[1] protocol 1, d[2] 0 (no Hall sensors), d[3] rows, d[4] columns,
+//                       d[5] features: 0x04 this build can give the board's ID
+//   get, value id 25 -> d[1..12] the MCU's unique ID (the RP2040's flash ID; zeros if this build has none)
+// With its ID the configurator knows this very keyboard among others of the model, keeps its backups under it,
+// and after a firmware update writes the keymap, the macros and the lighting back without asking. Anything else
+// on this channel is answered "unhandled", as the core does for a board with no custom values.
+#if defined(__has_include)
+#    if __has_include("hardware_id.h")
+#        include "hardware_id.h"
+#        define HS_HAS_HARDWARE_ID
+#    endif
+#endif
+#define HS_VAL_INFO 22
+#define HS_VAL_UID 25
+#define HS_FEATURE_BOARD_UID 0x04
+
+void via_custom_value_command_kb(uint8_t *data, uint8_t length) {
+    // data = [ command_id, channel_id, value_id, value_data ]
+    uint8_t *d = &data[2];
+    if (data[1] == id_custom_channel && data[0] == id_custom_get_value && length >= 16) {
+        if (d[0] == HS_VAL_INFO) {
+            d[1] = 1;
+            d[2] = 0;
+            d[3] = MATRIX_ROWS;
+            d[4] = MATRIX_COLS;
+#ifdef HS_HAS_HARDWARE_ID
+            d[5] = HS_FEATURE_BOARD_UID;
+#else
+            d[5] = 0;
+#endif
+            return;
+        }
+        if (d[0] == HS_VAL_UID) {
+            memset(&d[1], 0, 12);
+#ifdef HS_HAS_HARDWARE_ID
+            hardware_id_t id = get_hardware_id();
+            memcpy(&d[1], &id, sizeof(id) < 12 ? sizeof(id) : 12);
+#endif
+            return;
+        }
+    }
+    data[0] = id_unhandled;
+}
+// ---- board id: end
 
 const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
 
