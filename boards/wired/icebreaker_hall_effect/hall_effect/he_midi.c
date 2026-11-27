@@ -44,6 +44,18 @@ static uint16_t tempo10 = 0;
 static bool     tell = false;                           // something the page should hear about now
 static uint32_t told_at = 0;
 
+// ---- the board as the clock, when no DAW is one (set d[1] 5). It sends start, then 24 ticks a quarter note at
+// the tempo the configurator gave, and counts its own ticks exactly as it counts a DAW's, so the page hears one
+// clock whoever keeps it. A DAW that starts sending takes the clock back: the DAW is the master whenever it is one.
+static bool     master = false;
+static uint16_t m_tempo10 = 1200;
+static uint32_t m_last = 0, m_owed = 0;                 // microseconds since the last tick was sent
+
+// ---- the knob (set d[1] 6): while the configurator has it, a turn and a press are counted for the page and do
+// nothing else. The counts ride in the clock report.
+static bool    knob_taken = false;
+static uint8_t knob_turns = 0, knob_presses = 0;
+
 static void clock_tick(uint32_t now) {
     seen    = true;
     seen_at = now;
@@ -62,6 +74,12 @@ static void clock_tick(uint32_t now) {
 
 void he_midi_in(uint8_t b0, uint8_t b1, uint8_t b2) {
     uint32_t now = timer_read32();
+    if (master && (b0 == 0xF8 || b0 == 0xFA || b0 == 0xFB || b0 == 0xFC || b0 == 0xF2)) {   // a DAW has a clock: it is the master
+        master  = false;
+        running = false;
+        ring_n  = 0;
+        tell    = true;
+    }
     switch (b0) {
         case 0xF8: clock_tick(now); break;
         case 0xFA: running = true; first_tick = true; tick_no = 0; tick_at = now; tell = true; break;
@@ -74,7 +92,57 @@ void he_midi_in(uint8_t b0, uint8_t b1, uint8_t b2) {
 
 bool he_midi_running(void) { return running; }
 uint32_t he_midi_tick(void) { return tick_no; }
-static uint8_t flags(uint32_t now) { return (running ? 1 : 0) | ((seen && now - seen_at < 1000) ? 2 : 0); }
+static uint8_t flags(uint32_t now) { return (running ? 1 : 0) | ((seen && now - seen_at < 1000) ? 2 : 0) | (master ? 4 : 0); }
+
+static void master_set(bool want, uint16_t t10) {
+    uint32_t now = timer_read32();
+    if (t10) m_tempo10 = t10 < 300 ? 300 : t10 > 3000 ? 3000 : t10;
+    if (want == master) { if (master) { tempo10 = m_tempo10; tell = true; } return; }
+    master = want;
+    if (want) {
+        he_midi_out(0xFA, 0, 0);
+        running = true; first_tick = true; tick_no = 0; tick_at = now; ring_n = 0;
+        tempo10 = m_tempo10;
+        m_last  = now; m_owed = 0;
+    } else {
+        he_midi_out(0xFC, 0, 0);
+        running = false;
+    }
+    tell = true;
+}
+static void master_task(uint32_t now) {
+    uint32_t per = 25000000UL / m_tempo10;              // microseconds a tick lasts: a quarter note is 24
+    m_owed += (now - m_last) * 1000UL;
+    m_last  = now;
+    if (m_owed > per * 4) m_owed = per * 4;             // after a long stall it does not burst
+    while (m_owed >= per) {
+        m_owed -= per;
+        he_midi_out(0xF8, 0, 0);
+        clock_tick(now);
+        tempo10 = m_tempo10;
+    }
+}
+
+uint8_t he_midi_features(void) {
+    return HE_FEATURE2_MIDI_BRIDGE | HE_FEATURE2_CLOCK_MASTER
+#ifdef ENCODER_ENABLE
+           | HE_FEATURE2_KNOB
+#endif
+        ;
+}
+bool he_midi_knob(bool clockwise) {
+    if (!mode_on || !knob_taken) return false;
+    knob_turns += clockwise ? 1 : 0xFF;
+    tell = true;
+    return true;
+}
+bool he_midi_knob_held(void) { return mode_on && knob_taken; }
+bool he_midi_knob_press(void) {
+    if (!mode_on || !knob_taken) return false;
+    knob_presses++;
+    tell = true;
+    return true;
+}
 
 static void report(uint32_t now) {
 #ifdef RAW_ENABLE
@@ -89,6 +157,9 @@ static void report(uint32_t now) {
     r[7] = (tick_no >> 24) & 0xFF;
     r[8] = tempo10 & 0xFF;
     r[9] = tempo10 >> 8;
+    r[10] = knob_turns;
+    r[11] = knob_presses;
+    r[12] = knob_taken ? 1 : 0;
     raw_hid_send(r, 32);
 #endif
 }
@@ -155,7 +226,9 @@ bool he_midi_quiet(void) { return quiet; }
 void he_midi_mode(bool on) {
     mode_on = on;
     if (on) { listen(); return; }
-    // leaving: nothing waits, nothing is left sounding or bent
+    // leaving: nothing waits, nothing is left sounding or bent, and the board is nobody's clock or knob
+    if (master) { master = false; running = false; he_midi_out(0xFC, 0, 0); }
+    knob_taken = false;
     for (uint8_t i = 0; i < HE_OUT_QUEUE; i++) queue[i].used = false;
     waiting = 0;
     for (uint8_t ch = 0; ch < 16; ch++) if (chans & ((uint16_t)1 << ch)) he_midi_out(0xB0 | ch, 123, 0);
@@ -175,6 +248,7 @@ void he_midi_task(void) {
     if (!mode_on) return;
     uint32_t now32 = timer_read32();
     uint16_t now   = (uint16_t)now32;
+    if (master) master_task(now32);
     if (waiting) {
         for (uint8_t i = 0; i < HE_OUT_QUEUE; i++) {
             if (queue[i].used && (uint16_t)(now - queue[i].due) < 30000) {   // its millisecond has come
@@ -209,6 +283,12 @@ void he_midi_get(uint8_t *d) {
         d[14] = dropped;
         d[15] = HE_CONTROLS;
         d[16] = quiet ? 1 : 0;
+        d[17] = master ? 1 : 0;
+        d[18] = m_tempo10 >> 8;
+        d[19] = m_tempo10 & 0xFF;
+        d[20] = knob_turns;
+        d[21] = knob_presses;
+        d[22] = knob_taken ? 1 : 0;
     } else if (d[1] == 1) {
         uint8_t i = d[2];
         if (i >= HE_CONTROLS || control[i].kind == HE_CTL_NONE) { d[3] = 0xFF; d[4] = 0xFF; d[5] = 0; d[6] = 0; d[7] = 0; return; }
@@ -242,5 +322,11 @@ void he_midi_set(uint8_t *d) {
     } else if (d[1] == 4) {
         if (d[2] && !quiet) he_synth_end_all();   // what sounds is ended first, so nothing is left on in the DAW
         quiet = d[2] != 0;
+    } else if (d[1] == 5) {                       // the board as the clock: 1 or 0, then tempo x 10 (high byte first; 0 keeps it)
+        if (!mode_on) return;
+        master_set(d[2] != 0, ((uint16_t)d[3] << 8) | d[4]);
+    } else if (d[1] == 6) {                       // the knob: 1 the configurator has it, 0 it does what the keymap says
+        knob_taken = mode_on && d[2] != 0;
+        tell = true;
     }
 }

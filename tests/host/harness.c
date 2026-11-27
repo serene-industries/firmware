@@ -14,7 +14,9 @@
 //   V <sensor>      print the travel the last scan saw for that key (0-100)
 //   L               print the EEPROM layout numbers
 //   KC <row> <col> <hex>  the base-layer keycode at that position (the instrument's notes follow it)
-//   E               print and forget the instrument's events ("E on|off|pr channel note value" each, then "E .")
+//   E               print and forget the instrument's events ("E on|off|pr|cp|cc channel note value" each, then "E ."): a note on or off,
+//                   a note's pressure, a channel's pressure (note 0), a controller (note is its number)
+//   W cw|ccw|p      a click of the knob, or its press
 //   P <sensor> <permille>  hold that key at that many tenths of a percent of its travel
 //   X <scans> <ms>         that many scans, with that much time passing evenly over them
 #include "host.h"
@@ -162,7 +164,7 @@ int main(int argc, char **argv) {
         } else if (!strncmp(line, "KC", 2)) {
             int r, c; unsigned v; if (sscanf(line + 3, "%d %d %x", &r, &c, &v) == 3 && r < MATRIX_ROWS && c < MATRIX_COLS) host_kc[r][c] = (uint16_t)v;
         } else if (line[0] == 'E') {
-            for (int i = 0; i < n_ev; i++) fprintf(stdout, "E %s %d %d %d\n", ev[i][0] == 1 ? "on" : ev[i][0] == 0 ? "off" : "pr", ev[i][1], ev[i][2], ev[i][3]);
+            for (int i = 0; i < n_ev; i++) fprintf(stdout, "E %s %d %d %d\n", ev[i][0] == 1 ? "on" : ev[i][0] == 0 ? "off" : ev[i][0] == 3 ? "cp" : ev[i][0] == 4 ? "cc" : "pr", ev[i][1], ev[i][2], ev[i][3]);
             fprintf(stdout, "E .\n"); n_ev = 0;
         } else if (line[0] == 'P') {
             int s, pm; if (sscanf(line + 2, "%d %d", &s, &pm) == 2) {
@@ -181,6 +183,9 @@ int main(int argc, char **argv) {
         } else if (line[0] == 'O') {   // what went to the DAW through the bridge since the last O
             for (int i = 0; i < n_out; i++) fprintf(stdout, "O %u %02x %02x %02x\n", (unsigned)out_at[i], outs[i][0], outs[i][1], outs[i][2]);
             fprintf(stdout, "O .\n"); n_out = 0;
+        } else if (line[0] == 'W') {   // the knob as the keymap hands it over: "W cw", "W ccw", "W p" (its press); prints whether the configurator took it
+            bool took = line[2] == 'p' ? he_midi_knob_press() : he_midi_knob(line[2] == 'c' && line[3] == 'w');
+            fprintf(stdout, "W %d\n", took ? 1 : 0);
         } else if (line[0] == 'Z') {   // the board clock, ms
             fprintf(stdout, "NOW %u\n", (unsigned)host_now);
         } else if (line[0] == 'M') {

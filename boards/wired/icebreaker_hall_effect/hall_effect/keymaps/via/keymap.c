@@ -17,6 +17,7 @@
 #include QMK_KEYBOARD_H
 #include "he_switch_matrix.h"
 #include "he_synth.h"
+#include "he_midi.h"
 #include "icebreaker_rgb.h"
 
 
@@ -96,6 +97,16 @@ void he_synth_changed(bool on) {
 }
 
 bool process_record_user(uint16_t keycode, keyrecord_t *record) {
+    // The knob, while the configurator has it for the instrument (he_midi.c): a click and a press are counted
+    // for the page and do nothing else. With the encoder map a turn comes here as a key event of its own kind.
+    if (IS_ENCODEREVENT(record->event)) {
+        if (record->event.pressed ? he_midi_knob(record->event.type == ENCODER_CW_EVENT) : he_midi_knob_held()) return false;
+    }
+#ifdef HE_KNOB_ROW
+    else if (record->event.key.row == HE_KNOB_ROW && record->event.key.col == HE_KNOB_COL) {
+        if (record->event.pressed ? he_midi_knob_press() : he_midi_knob_held()) return false;
+    }
+#endif
     switch (keycode) {
         case SYNTH:
             if (record->event.pressed) {

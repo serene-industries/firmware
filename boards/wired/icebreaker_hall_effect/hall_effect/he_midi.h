@@ -13,10 +13,19 @@
 //   controls   A key can be a control: its depth is a controller number, pitch bend up or down, or channel
 //              pressure, sent by the board itself, so it works with no page open once it has been set.
 //
+//   clock out  With no DAW the board can be the clock itself (set d[1] 5): it sends start and 24 ticks a quarter
+//              note at a tempo the configurator gives, and tells the page of its own ticks as it tells it of a
+//              DAW's. A DAW set to follow an outside clock follows the board. A DAW that sends a clock of its
+//              own takes it back at once.
+//   the knob   On a board that has one, the configurator can take it (set d[1] 6): a turn and a press are then
+//              counted for the page (bytes 10 to 12 of the clock report) and do nothing else.
+//
 // Only while the instrument mode is on. Nothing is stored: after a power cycle the table is empty.
 //
 // The clock report (32 bytes, raw HID, sent only while the moving stream is on):
-//   [0] HE_STREAM_CLOCK_ID  [1] flags: 1 running, 2 a clock tick was seen in the last second
+//   [0] HE_STREAM_CLOCK_ID  [1] flags: 1 running, 2 a clock tick was seen in the last second, 4 the board is the clock
+//   [10] knob turns, a running count (one up a click clockwise, one down the other way)  [11] knob presses, a running count
+//   [12] 1 while the configurator has the knob
 //   [2..3] the board's clock in ms at the tick it describes, low byte first
 //   [4..7] that tick's number since start (24 a quarter note), low byte first   [8..9] tempo x 10, low first
 // It goes out on every sixth tick while running (a sixteenth note), on start, stop, continue and a new
@@ -26,7 +35,10 @@
 //   get d[1] 0             -> d[2] flags as above, d[3..4] tempo x 10 (high byte first), d[5..8] tick number
 //                             (high first), d[9..10] the board's clock in ms (high first), d[11] events
 //                             waiting to go out, d[12..13] events sent (high first), d[14] events dropped
-//                             (the queue was full), d[15] how many control slots there are
+//                             (the queue was full), d[15] how many control slots there are,
+//                             d[16] 1 while the board's own notes are kept in, d[17] 1 while the board is the clock,
+//                             d[18..19] its tempo x 10 (high first), d[20] knob turns, d[21] knob presses (running
+//                             counts), d[22] 1 while the configurator has the knob
 //   get d[1] 1, d[2] slot  -> d[3] row, d[4] col (0xFF: empty), d[5] kind, d[6] number, d[7] channel
 //   set d[1] 1, d[2] n, then n x (due ms low, due ms high, status, data 1, data 2), n up to 5
 //                             an event whose time has come, or is more than 30 s away, goes at once
@@ -36,6 +48,8 @@
 //   set d[1] 3             every slot emptied
 //   set d[1] 4, d[2] 1/0   the board's own notes and pressure kept in (1) or sent (0): kept in while the
 //                             page plays them itself, so the DAW does not hear both
+//   set d[1] 5, d[2] 1/0, d[3..4] tempo x 10 (high first, 30.0 to 300.0; 0 keeps it)   the board as the clock
+//   set d[1] 6, d[2] 1/0   the configurator takes the knob, or gives it back
 #pragma once
 
 #include <stdint.h>
@@ -44,6 +58,8 @@
 #define HE_VAL_MIDI 28
 #define HE_STREAM_CLOCK_ID 0xF2
 #define HE_FEATURE2_MIDI_BRIDGE 0x01   // HE_VAL_INFO d[9]
+#define HE_FEATURE2_CLOCK_MASTER 0x02  // the board can be the clock (set d[1] 5)
+#define HE_FEATURE2_KNOB 0x04          // the board has a knob the configurator can take (set d[1] 6)
 #define HE_CONTROLS 12
 #define HE_OUT_QUEUE 48
 
@@ -57,6 +73,10 @@ void he_midi_control(uint8_t sensor, uint16_t travel); // that key's travel, ten
 bool he_midi_quiet(void);            // the board's own notes are kept in
 bool he_midi_running(void);          // the DAW's clock is running
 uint32_t he_midi_tick(void);         // the last tick's number since the song's start, 24 a quarter note
+uint8_t he_midi_features(void);      // HE_VAL_INFO d[9]
+bool he_midi_knob(bool clockwise);   // a click of the knob. True: the configurator has it, and the turn does nothing else
+bool he_midi_knob_press(void);       // the knob pressed. True as above
+bool he_midi_knob_held(void);        // true while the configurator has the knob: the other half of a click or a press is swallowed too
 void he_midi_get(uint8_t *d);
 void he_midi_set(uint8_t *d);
 // Where the events go. With the MIDI interface: to it. Without (and on a host): a weak stand-in.

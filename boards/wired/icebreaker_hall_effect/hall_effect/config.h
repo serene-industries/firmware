@@ -89,4 +89,7 @@
 //encoder setup
 #define ENCODER_CLICK_PIN_A B12
 #define ENCODER_CLICK_PIN_B B15
+// where the knob's press sits in the matrix (he_switch_matrix.c, sensor 68)
+#define HE_KNOB_ROW 4
+#define HE_KNOB_COL 9
 

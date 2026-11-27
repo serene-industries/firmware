@@ -297,7 +297,7 @@ void he_perkey_get(uint8_t *d) {
             d[6] = HE_CANCEL_PAIRS;
             d[7] = he_scan_rate() >> 8;   // scans per second, measured (0 in the first half second)
             d[8] = he_scan_rate() & 0xFF;
-            d[9] = HE_FEATURE2_MIDI_BRIDGE;   // a second byte of features: the DAW bridge (HE_VAL_MIDI)
+            d[9] = he_midi_features();        // a second byte of features: the DAW bridge (HE_VAL_MIDI), the board as the clock, the knob
             break;
         case HE_VAL_KEY: {
             uint8_t s = he_sensor_at(d[1], d[2]);

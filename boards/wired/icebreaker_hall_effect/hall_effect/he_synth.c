@@ -10,7 +10,9 @@
 void he_synth_out(uint8_t kind, uint8_t channel, uint8_t note, uint8_t value) {
     if (kind == 1) midi_send_noteon(&midi_device, channel, note, value);
     else if (kind == 0) midi_send_noteoff(&midi_device, channel, note, value);
-    else midi_send_aftertouch(&midi_device, channel, note, value);
+    else if (kind == 2) midi_send_aftertouch(&midi_device, channel, note, value);
+    else if (kind == 3) midi_send_channelpressure(&midi_device, channel, value);
+    else midi_send_cc(&midi_device, channel, note, value);
 }
 #    define HE_SYNTH_HAS_MIDI 1
 #else
@@ -42,6 +44,47 @@ static bool    on = false;
 static uint8_t depth_a = 12, depth_b = 60, depth_rel = 30, channel = 0, octave = 2, pressure = 1;
 static uint16_t notes_started = 0, last_tenths = 0;
 static uint8_t  last_note = 0, last_velocity = 0;
+
+// ---- each note on its own channel (MPE). Off unless the configurator turns it on. The lower zone: channel 1
+// is the master (the keys that are controls belong there), channels 2 to 9 are the notes', so channel 10 stays
+// the drums'. A new note takes the channel that has been free the longest, so a note that is dying away keeps
+// its channel; with all eight in use it shares the one whose note is the oldest. A note's pressure is then
+// channel pressure on its own channel, which an MPE instrument hears as that note's alone.
+#define MPE_MEMBERS 8
+static bool     mpe = false;
+static uint8_t  mpe_notes[MPE_MEMBERS], mpe_press[MPE_MEMBERS];
+static uint32_t mpe_used[MPE_MEMBERS];
+static uint8_t mpe_take(void) {
+    uint8_t best = 0;
+    for (uint8_t i = 1; i < MPE_MEMBERS; i++) {
+        if (mpe_notes[i] < mpe_notes[best] || (mpe_notes[i] == mpe_notes[best] && (int32_t)(mpe_used[i] - mpe_used[best]) < 0)) best = i;
+    }
+    return best;
+}
+static void mpe_announce(void) {   // the MPE configuration message, on the master channel: how many channels the zone has (0: none)
+    he_synth_out(4, 0, 101, 0);
+    he_synth_out(4, 0, 100, 6);
+    he_synth_out(4, 0, 6, mpe ? MPE_MEMBERS : 0);
+}
+
+// ---- where a key's pressure begins, where it is full, and the shape between (not stored). From 0 means at
+// the second depth, which is where it began before this could be set. Shapes: 0 even, 1 early (most of the
+// rise in the first part of the way), 2 late.
+static uint8_t press_from[SENSOR_COUNT], press_full[SENSOR_COUNT], press_shape[SENSOR_COUNT];
+static bool    press_laid = false;
+static void press_defaults(void) { memset(press_from, 0, sizeof(press_from)); memset(press_full, 100, sizeof(press_full)); memset(press_shape, 0, sizeof(press_shape)); press_laid = true; }
+static uint8_t pressure_at(uint8_t s, uint16_t t, uint16_t b) {
+    if (!press_laid) press_defaults();
+    uint16_t from = press_from[s] ? (uint16_t)press_from[s] * 10 : b, full = (uint16_t)press_full[s] * 10;
+    if (full > 1000) full = 1000;
+    if (from > 950) from = 950;
+    if (full < from + 50) full = from + 50;
+    if (t <= from) return 0;
+    uint8_t x = t >= full ? 127 : (uint8_t)(((uint32_t)(t - from) * 127) / (full - from));
+    if (press_shape[s] == 1) return (uint8_t)(127 - ((uint16_t)(127 - x) * (127 - x)) / 127);
+    if (press_shape[s] == 2) return (uint8_t)(((uint16_t)x * x) / 127);
+    return x;
+}
 
 // ---- which key is which note: a piano laid over the board. A key's place decides (its matrix row and
 // column, the same on both boards), not what the key types, so the picture holds whatever the keymap is.
@@ -187,6 +230,8 @@ typedef struct {
     uint8_t  phase;       // 0 at rest, 1 between the two depths, 2 sounding
     uint8_t  note;        // the note that was started (the map may change while it sounds)
     uint8_t  sent;        // the pressure last sent
+    uint8_t  chan;        // the channel the note was started on
+    uint8_t  member;      // with MPE: which of the zone's channels that is; 0xFF without
     uint16_t prev;        // travel at the last scan, in tenths of a percent
     uint32_t cross_a;     // when the first depth was passed: scans * 256, placed between scans
     uint32_t deep;        // the last time the key was at or past the second depth, same unit
@@ -234,7 +279,10 @@ static uint16_t tenths_of(uint32_t q8) {   // scans * 256 to tenths of a millise
 static void note_out(uint8_t kind, uint8_t ch, uint8_t note, uint8_t value) { if (!he_midi_quiet()) he_synth_out(kind, ch, note, value); }
 
 static void end_note(synth_key_t *k, uint8_t vel) {
-    if (k->phase == 2) note_out(0, channel, k->note, vel);
+    if (k->phase == 2) {
+        note_out(0, k->chan, k->note, vel);
+        if (k->member < MPE_MEMBERS) { if (mpe_notes[k->member]) mpe_notes[k->member]--; mpe_used[k->member] = scans; }
+    }
     k->phase = 0;
 }
 
@@ -288,7 +336,17 @@ bool he_synth_key(matrix_row_t current_matrix[], uint8_t s, uint8_t row, uint8_t
             k->sent_at       = scans;
             k->deep          = now;
             notes_started++;
-            note_out(1, channel, k->note, last_velocity);
+            if (mpe) {
+                k->member = mpe_take();
+                k->chan   = k->member + 1;
+                mpe_notes[k->member]++;
+                mpe_used[k->member] = scans;
+                if (mpe_press[k->member]) { mpe_press[k->member] = 0; note_out(3, k->chan, 0, 0); }   // the channel's last note left its pressure there
+            } else {
+                k->member = 0xFF;
+                k->chan   = channel;
+            }
+            note_out(1, k->chan, k->note, last_velocity);
         } else if (t + 30 < a) {
             k->phase = 0;   // it went back before the second depth: no note
         }
@@ -297,13 +355,14 @@ bool he_synth_key(matrix_row_t current_matrix[], uint8_t s, uint8_t row, uint8_t
         if (t < rel) {
             end_note(k, velocity_for(tenths_of(now - ago(k->prev, t, rel) - k->deep)));
         } else if (pressure) {
-            uint8_t  p    = t <= b ? 0 : (uint8_t)(((uint32_t)(t - b) * 127) / (1000 - b));
+            uint8_t  p    = pressure_at(s, t, b);
             uint8_t  diff = p > k->sent ? p - k->sent : k->sent - p;
             uint32_t gap  = (rate ? rate : 1000) / 100;   // at most a hundred a second for one key
             if (diff >= 2 && scans - k->sent_at >= gap) {
                 k->sent    = p;
                 k->sent_at = scans;
-                note_out(2, channel, k->note, p);
+                if (k->member < MPE_MEMBERS) { mpe_press[k->member] = p; note_out(3, k->chan, 0, p); }
+                else note_out(2, k->chan, k->note, p);
             }
         }
     }
@@ -322,6 +381,8 @@ void he_synth_set_on(bool want) {
         drums = false;
         map_notes();
         memset(key, 0, sizeof(key));
+        memset(mpe_notes, 0, sizeof(mpe_notes)); memset(mpe_press, 0, sizeof(mpe_press));
+        if (mpe) mpe_announce();
         for (uint8_t s = 0; s < SENSOR_COUNT; s++) key[s].prev = 1000;      // a key held while the mode comes on does not strike
     }
     on = want;
@@ -337,6 +398,16 @@ void he_synth_end_all(void) { for (uint8_t s = 0; s < SENSOR_COUNT; s++) end_not
 static uint8_t within(uint8_t v, uint8_t lo, uint8_t hi) { return v < lo ? lo : v > hi ? hi : v; }
 
 void he_synth_get(uint8_t *d) {
+    if (d[1] == 1) {                         // one key's pressure curve
+        uint8_t s = he_sensor_at(d[2], d[3]);
+        if (s == HE_NO_SENSOR) { d[4] = 0xFF; return; }
+        if (!press_laid) press_defaults();
+        d[4] = press_from[s];
+        d[5] = press_full[s];
+        d[6] = press_shape[s];
+        d[7] = press_from[s] ? press_from[s] : depth_b;      // where it begins in fact
+        return;
+    }
     if (d[1] != 0) return;
     d[2]  = on ? 1 : 0;
     d[3]  = rate >> 8;
@@ -355,9 +426,11 @@ void he_synth_get(uint8_t *d) {
     d[16] = last_tenths & 0xFF;
     d[17] = HE_SYNTH_HAS_MIDI;
     d[18] = HE_SYNTH_LAYOUT_PIANO;
-    d[19] = 1 | (lights ? 2 : 0) | (lights_shown ? 4 : 0) | 8 | (drums ? 16 : 0) | 32;   // bit 5: it takes the drum layout from the configurator; the lights: this build has them, they are wanted, they are painted now; it knows the drum layout; that layout is on
+    d[19] = 1 | (lights ? 2 : 0) | (lights_shown ? 4 : 0) | 8 | (drums ? 16 : 0) | 32 | 64;   // bit 5: it takes the drum layout from the configurator; the lights: this build has them, they are wanted, they are painted now; it knows the drum layout; that layout is on
     d[21] = drums ? (uint8_t)(drum_now() + 1) : 0;             // the drum step the running light is on, from 1; 0 none
     d[20] = lights_shown ? lights_count() : 0;                 // how many keys are lit
+    d[22] = mpe ? 1 : 0;                                       // bit 6 of d[19]: this build has MPE and the pressure curve
+    d[23] = MPE_MEMBERS;
 }
 
 void he_synth_set(uint8_t *d) {
@@ -378,6 +451,23 @@ void he_synth_set(uint8_t *d) {
             map_notes();
         }
         if (d[7] != 0xFF) pressure = d[7] ? 1 : 0;
+    } else if (d[1] == 7) {                  // each note on its own channel (MPE): 1 or 0. What sounds is ended first, where it was started.
+        bool want = d[2] != 0;
+        if (want == mpe) return;
+        for (uint8_t s = 0; s < SENSOR_COUNT; s++) end_note(&key[s], 64);
+        mpe = want;
+        memset(mpe_notes, 0, sizeof(mpe_notes)); memset(mpe_press, 0, sizeof(mpe_press));
+        if (on) mpe_announce();
+    } else if (d[1] == 8) {                  // a pressure curve: d[2] row, d[3] column (both 0xFF: every key), d[4] where it begins (0: at the second depth), d[5] where it is full, d[6] the shape
+        if (!press_laid) press_defaults();
+        uint8_t from = d[4] ? within(d[4], 5, 90) : 0, shape = d[6] > 2 ? 0 : d[6];
+        uint8_t full = within(d[5], (from ? from : 5) + 5, 100);
+        uint8_t one  = (d[2] == 0xFF && d[3] == 0xFF) ? HE_NO_SENSOR : he_sensor_at(d[2], d[3]);
+        if (one == HE_NO_SENSOR && !(d[2] == 0xFF && d[3] == 0xFF)) return;
+        for (uint8_t s = 0; s < SENSOR_COUNT; s++) {
+            if (one != HE_NO_SENSOR && s != one) continue;
+            press_from[s] = from; press_full[s] = full; press_shape[s] = shape;
+        }
     } else if (d[1] == 3) {                  // the drum layout on or off, with up to six more keys (row, column) that belong to it
         if (!on) return;
         for (uint8_t s = 0; s < SENSOR_COUNT; s++) end_note(&key[s], 64);

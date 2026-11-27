@@ -25,6 +25,9 @@
 //                  d[19] the lights: bit 0 this build has them, bit 1 they are wanted, bit 2 they are painted now,
 //                  d[20] how many keys are lit (0 while they are not painted);
 //                  d[19] also: bit 3 this build knows the drum layout, bit 4 that layout is on now; d[21] the drum step being played, from 1 (0 none); bit 5 of d[19]: the drum layout is taken from the configurator (set d[1] 6)
+//                  bit 6 of d[19]: this build has MPE and the pressure curve; d[22] 1 while MPE is on, d[23] how many channels its zone has
+//   get  d[1] 1, d[2] row, d[3] column -> one key's pressure curve: d[4] where it begins (0: at the second depth; 0xFF no such key),
+//                  d[5] where it is full, d[6] the shape (0 even, 1 early, 2 late), d[7] where it begins in fact
 //   set  d[1] 0, d[2] 1 or 0            the mode on or off
 //   set  d[1] 1, d[2] first depth, d[3] second depth, d[4] release depth, d[5] channel,
 //        d[6] octave shift + 2, d[7] pressure 1 or 0     (0xFF leaves a value; the depths are kept
@@ -34,6 +37,10 @@
 //   set  d[1] 4, d[2] hue, d[3] the pad in hand (0 to 10, 0xFF none), d[4..19] sixteen steps: level 0 to 100, with 0x80 if the step holds a value of its own
 //   set  d[1] 5, d[2] 0 stopped, 1 on the DAW's clock, 2 own; own: d[3..4] the board's clock (low 16 bits, high byte first) when step 0 was, d[5..6] ms a step lasts times 16
 //   set  d[1] 2, d[2] 1 or 0            the lights: only the instrument's keys while the mode is on (the default), or the lighting as it is
+//   set  d[1] 7, d[2] 1 or 0            each note on its own channel (MPE, the lower zone: channel 1 the master, 2 to 9 the notes;
+//                                       pressure is then channel pressure on the note's channel). The zone is announced on channel 1.
+//   set  d[1] 8, d[2] row, d[3] column (both 0xFF: every key), d[4] where pressure begins in % (0: at the second depth; else 5 to 90),
+//        d[5] where it is full (at least 5 past the beginning, at most 100), d[6] the shape (0 even, 1 early, 2 late)
 // Nothing here is stored: the settings are the defaults again after a power cycle.
 #pragma once
 
@@ -62,7 +69,7 @@ void he_synth_lights_task(void);      // once a scan: repaints the lights when a
 void he_synth_get(uint8_t *d);
 void he_synth_set(uint8_t *d);
 // Where the events go. With the MIDI interface: to it. Without (and on a host): a weak stand-in.
-// kind 0 note off, 1 note on, 2 pressure.
+// kind 0 note off, 1 note on, 2 a note's pressure (polyphonic), 3 a channel's pressure (note unused), 4 a controller (note is its number).
 void he_synth_out(uint8_t kind, uint8_t channel, uint8_t note, uint8_t value);
 
 // The lights (he_synth.c decides, the board's rgb file paints: it owns the map from a sensor to its LED).

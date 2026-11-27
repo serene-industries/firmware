@@ -20,7 +20,7 @@ def check(name, cond, detail=''):
 class Out:
     def __init__(self, text):
         self.replies, self.matrices, self.keys, self.travel, self.warn, self.travels = [], [], {}, {}, [], []
-        self.mode = self.pair = self.layout = self.cal = None; self.pairs = {}; self.events = []; self.reports = []; self.outs = []; self.nows = []; self.lights = []
+        self.mode = self.pair = self.layout = self.cal = None; self.pairs = {}; self.events = []; self.reports = []; self.outs = []; self.nows = []; self.lights = []; self.knob = []
         for ln in text.splitlines():
             p = ln.split()
             if not p: continue
@@ -39,6 +39,7 @@ class Out:
             elif p[0] == 'H' and p[1] != '.': self.reports.append((int(p[1]), [int(x, 16) for x in p[2:]]))
             elif p[0] == 'O' and p[1] != '.': self.outs.append((int(p[1]), [int(x, 16) for x in p[2:]]))
             elif p[0] == 'NOW': self.nows.append(int(p[1]))
+            elif p[0] == 'W': self.knob.append(int(p[1]))
             elif p[0] == 'G': self.lights.append((int(p[1]), int(p[2]), int(p[3]), p[4]))
 
 def boot(binary, ee, lines):
@@ -345,7 +346,12 @@ def run_board(board, title):
             pos = rng.choice(spots) if rng.random() < 0.9 else empty
             if rng.random() < 0.07:   # the instrument: the mode, its settings, its read-back
                 y = rng.random()
-                script.append(('S', [SET, 0, 27, 0, rng.choice([0, 1, 1])] if y < 0.4 else [GET, 0, 27, 0] if y < 0.8 else [SET, 0, 27, 1, byte(), byte(), byte(), byte(), rng.choice([0, 1, 2, 3, 4, 9, 255]), byte()]))
+                if y < 0.80: script.append(('S', [SET, 0, 27, 0, rng.choice([0, 1, 1])] if y < 0.36 else [GET, 0, 27, 0] if y < 0.66 else [SET, 0, 27, 1, byte(), byte(), byte(), byte(), rng.choice([0, 1, 2, 3, 4, 9, 255]), byte()]))
+                elif y < 0.87: script.append(('S', [SET, 0, 27, 7, rng.choice([0, 1, 1])]))                      # each note on its own channel
+                elif y < 0.95:                                                                                  # a pressure curve, for a piano key or for every key
+                    kpos = rng.choice([(2, 1), (2, 2), (2, 5), (1, 2), (0xFF, 0xFF), (0xFF, 0xFF), pos])
+                    script.append(('S', [SET, 0, 27, 8, kpos[0], kpos[1], rng.choice([0, 0, 5, 30, 62, 90, 200]), rng.choice([0, 20, 65, 70, 100, 255]), rng.choice([0, 1, 2, 3])]))
+                else: script.append(('S', [GET, 0, 27, 1, *rng.choice([(2, 1), (2, 5), pos])]))
                 continue
             if rng.random() < 0.09:   # the DAW bridge: the clock, events to go out, keys as controls, the read-backs
                 y = rng.random()
@@ -355,8 +361,11 @@ def run_board(board, title):
                 elif y < 0.75:
                     cpos = rng.choice([(o.keys[i]['row'], o.keys[i]['col']) for i in busy]) if rng.random() < 0.8 else rng.choice([pos, (0xFF, 0xFF)])
                     script.append(('S', [SET, 0, 28, 2, rng.choice([0, 1, 2, 3, 11, 12]), cpos[0], cpos[1], rng.choice([0, 1, 1, 2, 3, 4, 5]), byte(), byte()]))
-                elif y < 0.80: script.append(('S', [SET, 0, 28, 3]))
-                elif y < 0.88: script.append(('S', [SET, 0, 28, 4, rng.choice([0, 1])]))
+                elif y < 0.78: script.append(('S', [SET, 0, 28, 3]))
+                elif y < 0.82: script.append(('S', [SET, 0, 28, 5, rng.choice([0, 1, 1]), *rng.choice([(0, 0), (4, 0xB0), (0x05, 0x14), (0, 9), (0xFF, 0xFF)])]))   # the board as the clock
+                elif y < 0.84: script.append(('S', [SET, 0, 28, 6, rng.choice([0, 1])]))
+                elif y < 0.86: script.append(('W', rng.choice(['cw', 'cw', 'ccw', 'p'])))
+                elif y < 0.90: script.append(('S', [SET, 0, 28, 4, rng.choice([0, 1])]))
                 else:
                     n = rng.randint(0, 6)
                     script.append(('S', [SET, 0, 28, 1, n] + [x for _ in range(min(n, 5)) for x in (rng.choice([0, 16, 200, 255]), rng.choice([0, 39, 40, 45, 60, 200]), rng.choice([0x90, 0x80, 0xB0, 0xE1, 0x7F, 0xF8, 0xD2]), byte(), byte())]))
@@ -388,7 +397,7 @@ def run_board(board, title):
             else: script.append(('T', rng.choice([100, 400, 900, 1500, 1990, 2010, 2500, 4000])))
         script.append(('E', 0)); script.append(('O', 0))
         fresh(ee)
-        line = {'KC': lambda a: 'KC %d %d %x' % tuple(a), 'E': lambda a: 'E', 'S': lambda a: 'S ' + ' '.join('%02x' % b for b in a), 'T': lambda a: 'T %d' % a, 'RAW': lambda a: 'RAW %d %d' % tuple(a), 'N': lambda a: 'N %d' % a, 'V': lambda a: 'V %d' % a, 'C': lambda a: 'C ' + ' '.join('%02x' % b for b in a), 'O': lambda a: 'O'}
+        line = {'KC': lambda a: 'KC %d %d %x' % tuple(a), 'E': lambda a: 'E', 'S': lambda a: 'S ' + ' '.join('%02x' % b for b in a), 'T': lambda a: 'T %d' % a, 'RAW': lambda a: 'RAW %d %d' % tuple(a), 'N': lambda a: 'N %d' % a, 'V': lambda a: 'V %d' % a, 'C': lambda a: 'C ' + ' '.join('%02x' % b for b in a), 'O': lambda a: 'O', 'W': lambda a: 'W ' + a}
         fwo = boot(binary, ee, [line[op](a) for op, a in script]); fw = fwo.replies
         opts = dict(name=title, vendorId=0x5363, productId=0x0010, rows=L['rows'], cols=L['cols'], sensors=[[o.keys[i]['row'], o.keys[i]['col']] for i in range(L['sensors'])],
                     defaultPair=[sA, sD], rest=L['floor'], bottom=L['ceiling'], calStart=L['calstart'], alias=({'68': 18} if enc else {}), noTravel=([68] if enc else []), synth=True, hasMidi=False, clockAtBoot=10000, perKey=True, uid=[0x44, 0x33, 0x22, 0x11, 0x88, 0x77, 0x66, 0x55, 0xCC, 0xBB, 0xAA, 0x99], version=[1, 0, 5, 0])
@@ -488,6 +497,58 @@ def run_synth(board, title):
     check('the home row A to \' is C D E F G A B C D E F', whites == [60, 62, 64, 65, 67, 69, 71, 72, 74, 76, 77], str(whites))
     check('the row above is . C# D# . F# G# A# . C# D# . F#', blacks == [None, 61, 63, None, 66, 68, 70, None, 73, 75, None, 78], str(blacks))
 
+    # each note on its own channel (MPE)
+    MPE_ON, MPE_OFF = S(SET, 0, 27, 7, 1), S(SET, 0, 27, 7, 0)
+    D_, F_ = at[(2, 3)], at[(2, 4)]
+    o = boot(binary, ee, KEYS + WARM + [GETS, ON, MPE_ON, 'E', GETS] + strike(A, 8) + strike(S_, 8) + ['P %d 800' % A, 'X 15 15', 'P %d 900' % S_, 'X 15 15', 'E'] + up(A) + ['E'] + strike(D_, 8) + ['E'] + up(S_) + up(D_) + ['E', MPE_OFF, 'E'] + strike(A, 8) + ['P %d 800' % A, 'X 15 15', 'E'])
+    g0, g1 = o.replies[0], o.replies[3]
+    check('the build says it has MPE and the pressure curve, MPE off until asked, a zone of eight channels', g0[21] & 64 and g0[24] == 0 and g0[25] == 8 and g1[24] == 1, str([g0[21], g0[24:26], g1[24]]))
+    ev = o.events
+    check('turned on, the zone is announced on channel 1: eight member channels', ev[:3] == [('cc', 0, 101, 0), ('cc', 0, 100, 6), ('cc', 0, 6, 8)], str(ev[:4]))
+    ons = [e for e in ev if e[0] == 'on']
+    check('with MPE two notes held go out on two channels of their own (2 and 3), not on channel 1', [(e[1], e[2]) for e in ons[:2]] == [(1, 60), (2, 62)], str(ons[:2]))
+    cps = [e for e in ev if e[0] == 'cp']
+    check('each note\'s pressure is channel pressure on its own channel: A at 80 %% is 63 on channel 2, S at 90 %% is 95 on channel 3, and no polyphonic pressure is sent',
+          [e for e in cps if e[1] == 1][-1][3] in range(61, 66) and [e for e in cps if e[1] == 2][-1][3] in range(93, 98) and not [e for e in ev[:ev.index(('cc', 0, 6, 0))] if e[0] == 'pr'], str(cps[-4:]))
+    offs = [e for e in ev if e[0] == 'off']
+    check('a note ends on the channel it was started on', [(e[1], e[2]) for e in offs[:3]] == [(1, 60), (2, 62), (3, 64)], str(offs))
+    check('a new note takes a channel that is free (4), not the one a note has just left, and a channel that held pressure is told 0 before its next note', ons[2][1] == 3 and ons[2][2] == 64, str(ons[2]))
+    check('turned off, the zone is taken away (0 channels) and a note is on channel 1 with polyphonic pressure again', ('cc', 0, 6, 0) in ev and ons[-1][:3] == ('on', 0, 60) and ev[-1][0] == 'pr' and ev[-1][1] == 0, str(ev[-3:]))
+    seq = []
+    for c in range(1, 10): seq += strike(at[(2, c)], 4)
+    o = boot(binary, ee, KEYS + WARM + [ON, MPE_ON, 'E'] + seq + ['E'] + up(A) + strike(A, 4, 1000, 0) + ['P %d 700' % A, 'X 15 15', 'E'] + up(A) + strike(A, 4) + ['E'])
+    ons = [e for e in o.events if e[0] == 'on']
+    check('nine notes held: eight channels of their own, the ninth shares the one whose note is the oldest', [e[1] for e in ons[:9]] == [1, 2, 3, 4, 5, 6, 7, 8, 1], str([e[1] for e in ons[:9]]))
+    i = o.events.index(ons[10]) if len(ons) > 10 else -1
+    check('a channel whose last note left pressure on it is sent pressure 0 before its next note', i > 0 and o.events[i - 1][0] == 'cp' and o.events[i - 1][1] == ons[10][1] and o.events[i - 1][3] == 0, str(o.events[i - 2:i + 1] if i > 0 else ons))
+    o = boot(binary, ee, KEYS + WARM + [ON, MPE_ON] + strike(A, 8) + ['E', MPE_OFF, 'E'])
+    check('MPE turned off while a note sounds: the note is ended first, on its own channel', [e[:3] for e in o.events if e[0] in ('on', 'off')] == [('on', 1, 60), ('off', 1, 60)], str(o.events))
+    o = boot(binary, ee, KEYS + WARM + [MPE_ON, 'E', ON, 'E'])
+    check('MPE set while the mode is off says nothing until the mode comes on, then the zone is announced', o.events == [('cc', 0, 101, 0), ('cc', 0, 100, 6), ('cc', 0, 6, 8)], str(o.events))
+
+    # where pressure begins, where it is full, and the shape between: for one key or for all
+    CURVE = lambda pos, frm, full, shape: S(SET, 0, 27, 8, pos[0], pos[1], frm, full, shape)
+    CGET = lambda pos: S(GET, 0, 27, 1, pos[0], pos[1])
+    def last_pr(o_, note): q = [e for e in o_.events if e[0] == 'pr' and e[2] == note]; return q[-1][3] if q else None
+    o = boot(binary, ee, KEYS + WARM + [ON, CGET((2, 1)), CURVE((2, 1), 70, 90, 0), CGET((2, 1)), CGET((2, 2))] + strike(A, 8, 650) + strike(S_, 8, 650) + ['X 15 15', 'E', 'P %d 800' % A, 'P %d 800' % S_, 'X 15 15', 'E', 'P %d 900' % A, 'X 15 15', 'E'])
+    r0, r1, r2 = o.replies[1][6:10], o.replies[3][6:10], o.replies[4][6:10]
+    check('a key\'s curve reads back: by default from the second depth (60) to 100, even; set to 70 to 90 for A only, S keeps the default', r0 == [0, 100, 0, 60] and r1 == [70, 90, 0, 70] and r2 == [0, 100, 0, 60], str([r0, r1, r2]))
+    ev = o.events
+    a65 = [e for e in ev[:ev.index(('pr', 0, 62, 15)) + 1] if e[0] == 'pr' and e[2] == 60] if ('pr', 0, 62, 15) in ev else None
+    check('at 65 %% A (pressure from 70) sends none while S (from 60) sends 15', a65 == [], str([e for e in ev if e[0] == 'pr'][:4]))
+    check('at 80 %% A is half way up its curve (63) and S at 63 of its own; at 90 %% A is full (127)', sorted([e[3] for e in ev if e[0] == 'pr' and e[2] == 60])[-2:] == [63, 127] and last_pr(o, 62) == 63, str([e for e in ev if e[0] == 'pr']))
+    vals = {}
+    for shape in (0, 1, 2):
+        o = boot(binary, ee, KEYS + WARM + [ON, CURVE((0xFF, 0xFF), 20, 100, shape)] + strike(A, 8, 700) + ['X 15 15', 'E', CGET((2, 5))])
+        vals[shape] = last_pr(o, 60); last = o.replies[-1][6:10]
+    check('the shape between, at the same depth (70 %% on a curve from 20 to 100): even %s, early more, late less; set for every key at once it reads back on another key' % vals[0],
+          vals[0] == 79 and vals[1] > vals[0] + 20 and vals[2] < vals[0] - 20 and last == [20, 100, 2, 20], str([vals, last]))
+    o = boot(binary, ee, KEYS + WARM + [ON, CURVE((2, 1), 30, 100, 0)] + strike(A, 8, 650) + ['X 15 15', 'E'])
+    check('pressure can begin before the second depth: the note still starts there, already with pressure (65 %% on a curve from 30 is 63)', [e[0] for e in o.events][:2] == ['on', 'pr'] and last_pr(o, 60) == 63, str(o.events))
+    o = boot(binary, ee, KEYS + WARM + [ON, CURVE((2, 1), 2, 3, 9), CGET((2, 1)), CURVE((2, 1), 95, 96, 1), CGET((2, 1)), CURVE((9, 9), 50, 60, 0), CURVE((2, 1), 0, 10, 0), CGET((2, 1)), CGET((9, 9))])
+    check('the limits: it begins at 5 to 90 and is full at least 5 further on and at most at 100; an unknown shape is even; no such key changes nothing and reads as none',
+          o.replies[2][6:9] == [5, 10, 0] and o.replies[4][6:9] == [90, 96, 1] and o.replies[7][6:9] == [0, 10, 0] and o.replies[8][6] == 0xFF, str([o.replies[2][6:9], o.replies[4][6:9], o.replies[7][6:9], o.replies[8][6]]))
+
     # the octave by VIA, and the limits
     o = boot(binary, ee, KEYS + WARM + [ON] + strike(S_, 8) + ['E', S(SET, 0, 27, 1, 0xFF, 0xFF, 0xFF, 0xFF, 3, 0xFF), 'P %d 0' % A, 'X 5 5'] + strike(A, 8) + ['E',
               S(SET, 0, 27, 1, 2, 5, 99, 0x13, 9, 0), GETS])
@@ -525,20 +586,20 @@ def run_synth(board, title):
     L = o.lights
     check('lights: nothing is painted while the mode is off', L[0][0] == 0 and L[0][1] == 0, str(L[0]))
     check('lights: with the mode on the white keys, the black keys and the two octave keys are lit and every other key is dark', L[1][0] == 1 and L[1][3] == want, L[1][3] + ' wanted ' + want)
-    check('lights: the board says so (has them, wanted, painted; 21 keys lit)', gets(o)[0][21] == 47 and gets(o)[0][22] == 21, str(gets(o)[0][21:23]))
+    check('lights: the board says so (has them, wanted, painted; 21 keys lit)', gets(o)[0][21] == 111 and gets(o)[0][22] == 21, str(gets(o)[0][21:23]))
     down = want[:A] + 'W' + want[A + 1:]
     check('lights: A held is bright, and back as it was when it comes up', L[2][3] == down and L[3][3] == want, L[2][3])
     ctl = want[:SPACE] + 'c' + want[SPACE + 1:]
     check('lights: a key the configurator makes a control lights up as one (22 lit)', L[4][3] == ctl and gets(o)[1][22] == 22, L[4][3])
     check('lights: three seconds with nothing moving write the strip about once a second, not every scan (%d writes)' % (L[5][1] - L[4][1]), 2 <= L[5][1] - L[4][1] <= 4, str([L[4][1], L[5][1]]))
-    check('lights: the mode off puts the old lighting back, once', L[6][0] == 0 and L[6][2] == 1 and gets(o)[2][21] == 43 and gets(o)[2][22] == 0, str([L[6], gets(o)[2][21:23]]))
+    check('lights: the mode off puts the old lighting back, once', L[6][0] == 0 and L[6][2] == 1 and gets(o)[2][21] == 107 and gets(o)[2][22] == 0, str([L[6], gets(o)[2][21:23]]))
     seq = [ON]
     for _ in range(40): seq += ['P %d 400' % A, 'Y 5', 'P %d 0' % A, 'Y 5']
     o = boot(binary, ee, WARM + seq + ['G'])
     check('lights: a key hammered eighty times in 400 ms writes the strip at most forty times a second (%d writes)' % o.lights[0][1], o.lights[0][1] <= 18, str(o.lights[0][1]))
     o = boot(binary, ee, WARM + [ON, S(SET, 0, 27, 2, 0), 'G', GETS, 'Y 1200', 'G', S(SET, 0, 27, 2, 1), 'G', GETS, OFF])
     check('lights: turned off from the configurator the old lighting is back while the mode stays on, and nothing repaints; turned on they are painted again',
-          o.lights[0][0] == 0 and o.lights[0][2] == 1 and gets(o)[0][21] == 41 and o.lights[1][1] == o.lights[0][1] and o.lights[2][0] == 1 and gets(o)[1][21] == 47, str([o.lights, gets(o)[0][21], gets(o)[1][21]]))
+          o.lights[0][0] == 0 and o.lights[0][2] == 1 and gets(o)[0][21] == 105 and o.lights[1][1] == o.lights[0][1] and o.lights[2][0] == 1 and gets(o)[1][21] == 111, str([o.lights, gets(o)[0][21], gets(o)[1][21]]))
     o = boot(binary, ee, WARM + [S(SET, 0, 4), 'T 50', ON, 'G', 'Y 1500', 'G'])   # calibration paints the keys itself
     check('lights: while the board is calibrating the instrument does not repaint over it', o.lights[1][1] == o.lights[0][1], str(o.lights))
 
@@ -650,7 +711,7 @@ def run_bridge(board, title):
     def ticks(n, ms): return [l for _ in range(n) for l in ('C f8', 'Y %d' % ms)]
     def clock(reps): return [(t, r) for t, r in reps if r[0] == 0xF2]
     def bit(m, pos): return (m[pos[0]] >> pos[1]) & 1
-    check('info says the build has the bridge, in a second byte of features', o.replies[0][11] == 1, str(o.replies[0][:13]))
+    check('info says the build has the bridge and can be the clock, in a second byte of features (a host build has no knob)', o.replies[0][11] == 3, str(o.replies[0][:13]))
 
     # ---- the clock: start, 48 ticks 20 ms apart (125 beats a minute), then what the board says
     o = boot(binary, ee, WARM + [ON, STREAM, 'Y 30', 'H', 'Z', 'C fa'] + ticks(48, 20) + [GETM, 'H', 'Z'])
@@ -718,6 +779,41 @@ def run_bridge(board, title):
     check('leaving the mode with controls held: each is sent back to rest, and the key types again', sorted(left) == sorted([[0xB0, 64, 0], [0xE0, 0x00, 0x40]]) and bit(o.matrices[0], (4, 3)) == 1, str(left))
     o = boot(binary, ee, WARM + [ON] + SETUP + [S(SET, 0, 28, 3), 'P %d 1000' % SPACE, 'Y 60', 'M', 'O', S(GET, 0, 28, 1, 0)])
     check('every slot emptied: SPACE types again and sends nothing', bit(o.matrices[0], (4, 3)) == 1 and not o.outs and o.replies[-1][5] == 0xFF, str(o.outs))
+
+    # ---- the board as the clock, when no DAW is one
+    MASTER = lambda on, t10=0: S(SET, 0, 28, 5, on, t10 >> 8, t10 & 0xFF)
+    o = boot(binary, ee, WARM + [ON, STREAM, 'Y 30', 'H', 'O', 'Z', MASTER(1, 1200), 'Y 1000', GETM, 'O', 'H'])
+    t0 = o.nows[0]; rt = [(t - t0, m[0]) for t, m in o.outs]
+    f8 = [t for t, b in rt if b == 0xF8]
+    check('as the clock at 120: a start, then 48 ticks in a second (%d), evenly, none more than a millisecond off its place' % len(f8),
+          rt[0] == (0, 0xFA) and len(f8) == 48 and all(abs(t - (i + 1) * 20.8333) <= 1.0 for i, t in enumerate(f8)), str(rt[:4]) + str(f8[-3:]))
+    g = o.replies[-1]
+    check('read-back: running, a clock seen, the board is the clock, 120.0, on tick 47', g[4] == 7 and g[5] * 256 + g[6] == 1200 and (g[9] << 8 | g[10]) == 47 and g[19] == 1 and g[20] * 256 + g[21] == 1200, str(g[4:22]))
+    cl = [(t, r) for t, r in clock(o.reports) if r[1] & 4]
+    six = [r[4] | r[5] << 8 for _, r in cl if (r[4] | r[5] << 8) % 6 == 0 and (r[4] | r[5] << 8) > 0]
+    check('the page hears the board\'s own ticks as it hears a DAW\'s: every sixth, with the tempo, marked as the board\'s', six == [6, 12, 18, 24, 30, 36, 42] and all(r[8] | r[9] << 8 == 1200 for _, r in cl), str(six))
+    o = boot(binary, ee, WARM + [ON, MASTER(1, 1200), 'Y 500', 'O', MASTER(1, 900), 'Y 1000', 'O', MASTER(0), 'Y 300', 'O', GETM])
+    f8 = [t for t, m in o.outs if m[0] == 0xF8]; t0 = o.outs[0][0]
+    late = [t for t in f8 if t - t0 > 500]
+    check('a new tempo is taken at once without a new start (90: 36 ticks in the next second), and off sends a stop and no tick after it',
+          35 <= len([t for t in late if t - t0 <= 1500]) <= 37 and [m[0] for t, m in o.outs].count(0xFA) == 1 and o.outs[-1][1][0] == 0xFC and o.replies[-1][4] & 5 == 0, str([len(late), o.outs[-1]]))
+    o = boot(binary, ee, WARM + [ON, MASTER(1, 1200), 'Y 200', 'O', 'C f8', GETM, 'Y 300', 'O'])
+    check('a DAW that sends a clock takes it back: the board stops being the clock at once, sends no more ticks and no stop', o.replies[-1][19] == 0 and o.replies[-1][4] & 5 == 0 and not o.outs[len([1 for t, m in o.outs if t <= o.outs[0][0] + 200]):], str(o.outs[-3:]))
+    o = boot(binary, ee, WARM + [ON, MASTER(1, 1200), 'Y 100', 'O', OFF, 'Y 300', 'O', MASTER(1, 1200), 'Y 100', 'O', GETM])
+    after = [m[0] for t, m in o.outs if t >= o.outs[0][0] + 100]
+    check('leaving the mode stops the clock (a stop goes out), and with the mode off the board cannot be made the clock', after == [0xFC] and o.replies[-1][19] == 0, str(after))
+    o = boot(binary, ee, WARM + [ON, MASTER(1, 10), GETM, MASTER(1, 9999), GETM])
+    check('the tempo is kept between 30.0 and 300.0', o.replies[-3][20] * 256 + o.replies[-3][21] == 300 and o.replies[-1][20] * 256 + o.replies[-1][21] == 3000, str([o.replies[-3][20:22], o.replies[-1][20:22]]))
+
+    # ---- the knob
+    KNOB = lambda on: S(SET, 0, 28, 6, on)
+    o = boot(binary, ee, WARM + ['W cw', ON, 'W cw', KNOB(1), STREAM, 'Y 30', 'H', 'W cw', 'W cw', 'W ccw', 'W p', 'Y 3', 'H', GETM, 'W ccw', 'W ccw', 'W ccw', GETM, KNOB(0), 'W cw', OFF])
+    check('the knob does what the keymap says until the configurator takes it; then a click and a press are swallowed; given back, they are the keymap\'s again', o.knob == [0, 0, 1, 1, 1, 1, 1, 1, 1, 0], str(o.knob))
+    k = [r for t, r in clock(o.reports)][-1]
+    check('the page is told at once, in the clock report: one click clockwise in all, one press, the knob taken', k[10] == 1 and k[11] == 1 and k[12] == 1 and len(clock(o.reports)) >= 1, str(k[10:13]))
+    check('read-back: the counts run on (two clicks back past zero is 254)', o.replies[-4][22:25] == [1, 1, 1] and o.replies[-3][22:25] == [254, 1, 1], str([o.replies[-4][22:25], o.replies[-3][22:25]]))
+    o = boot(binary, ee, WARM + [ON, KNOB(1), OFF, ON, 'W cw'])
+    check('leaving the mode gives the knob back', o.knob == [0], str(o.knob))
 
     # ---- the board's own notes kept in while the page plays them
     o = boot(binary, ee, WARM + [ON, S(SET, 0, 28, 4, 1)] + strike(A, 8) + ['Y 20', 'E', S(GET, 0, 27, 0), GETM])

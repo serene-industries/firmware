@@ -103,7 +103,7 @@
   emulated board answers every packet as this source does. Run it before any
   HE release; it proves the logic, not the MCU.
 
-## The instrument mode (branch work; BETA builds up to Icebreaker HE 1.0.11 / Cleaver HE 0.4.2.21, 2026-11-27; the owner played 1.0.6 and 1.0.7, and runs 1.0.10, on an Icebreaker HE; the Cleaver builds are unseen on a board)
+## The instrument mode (branch work; BETA builds up to Icebreaker HE 1.0.12 / Cleaver HE 0.4.2.22, 2026-11-27; the owner played 1.0.6 and 1.0.7, and runs 1.0.10, on an Icebreaker HE; the Cleaver builds are unseen on a board)
 
 - **On the owner's Icebreaker HE, 1.0.10, 2026-11-27** (from the configurator's DIAGNOSTICS line): the board
   enumerates as keyboard + raw HID + MIDI and the browser hears its notes (13 of 13); the moving stream runs at
@@ -201,6 +201,34 @@
   firmware: change it in the configurator.** The lights: an empty step is dim white (28 of 255 of the lights'
   brightness), the first of a beat a little brighter (60), a step with a hit is the voice's colour from 90 up
   to full by its level, paler with a value of its own, and the step being played is full white.
+- **MPE, the pressure curve, the board as the clock, the knob** (BETA builds Icebreaker HE 1.0.12 / Cleaver HE
+  0.4.2.22, built 2026-11-27, unseen on a board, never tried with a DAW; the owner, of the picks left over:
+  "yes shoot all of those targets"). All four are off or untouched until the configurator asks, and nothing is
+  stored.
+  **MPE** (id 27 set d[1] 7; bit 6 of the get's d[19], d[22] on, d[23] the zone's channels): the lower zone,
+  channel 1 the master, channels 2 to 9 the notes' (eight, so channel 10 stays the drums'). A new note takes the
+  channel free the longest; with all eight in use it shares the one whose note is the oldest. A note's pressure is
+  channel pressure on its own channel; a channel that still holds a pressure is told 0 before its next note. The
+  zone is announced on channel 1 (RPN 6) when MPE comes on, and again each time the mode comes on with it.
+  `he_synth_out` kinds: 0 off, 1 on, 2 a note's pressure, 3 a channel's pressure, 4 a controller. A note ends on
+  the channel it was started on (`synth_key_t.chan`). The keys bend no pitch per note: a key has one axis.
+  **The pressure curve** (id 27 set d[1] 8, get d[1] 1): per key or for every key, where pressure begins (0 = at
+  the second depth, as before; else 5 to 90 %), where it is full (5 past that to 100 %) and the shape between
+  (even, early, late). `pressure_at` in `he_synth.c`. With the defaults the bytes sent are those of the builds
+  before.
+  **The board as the clock** (`he_midi.c`, id 28 set d[1] 5, feature bit 2 of info d[9]): start, then 24 ticks a
+  quarter note at a tempo the configurator gives (30.0 to 300.0), from the millisecond clock with the remainder
+  carried, so no tick is more than a millisecond off its place. Its own ticks are counted as a DAW's are, so the
+  page hears one clock whoever keeps it (flag 4 of the clock report). **A DAW that sends any clock byte takes the
+  clock back at once**: the DAW is the master whenever it is one. Leaving the mode sends a stop.
+  **The knob** (id 28 set d[1] 6, feature bit 4 of info d[9], Icebreaker HE only: `ENCODER_ENABLE`): while the
+  configurator has it, a click and the press are counted (bytes 10 to 12 of the clock report) and do nothing
+  else. With `ENCODER_MAP_ENABLE` a turn never reaches `encoder_update_user` (the function in the keymap is dead
+  code): it comes to `process_record_user` as a key event of type `ENCODER_CW_EVENT` / `ENCODER_CCW_EVENT`, and
+  that is where it is caught. The press is the matrix place `HE_KNOB_ROW` / `HE_KNOB_COL` (`config.h`). Not known
+  from the host: that the encoder's events arrive as the QMK source says, and anything about timing against a DAW.
+  QMK's MIDI source in the tree CI builds against is `quantum/midi/` (not `tmk_core/protocol/midi/`); a realtime
+  byte sent with `midi_send_data` goes out as a single-byte USB-MIDI event.
 - Host tests: `run_synth` in `tests/host/run.py` (the piano by place whatever the keymap says, a strike, its
   velocity against its speed, pressure, the note's end, the octave keys, typing kept apart), `run_stream` (the
   moving stream: the first whole frame, the beat, a press as its own key, two keys in one report, the free
@@ -208,5 +236,6 @@
   emulated board covers id 27, the notes and the octave keys; `run_bridge` (the clock: start, ticks, tempo,
   stop, continue, a new position, none; events out at their millisecond; the queue's limit; controls: values,
   the two bend keys as one bend, the rate, a note key refused, rest on leaving; quiet), and the comparison
-  covers id 28, clock bytes from the host and every message the bridge sends. The host build now compiles the stream code
+  covers id 28, clock bytes from the host and every message the bridge sends; MPE, the curve, the clock out and
+  the knob are in `run_synth` and `run_bridge` and in the comparison (473 checks alone, 723 with 25 random runs). The host build now compiles the stream code
   (`-DRAW_ENABLE`); before 2026-11-26 `he_stream.c` was built as empty stubs there and nothing tested it.
