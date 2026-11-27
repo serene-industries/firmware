@@ -103,7 +103,7 @@
   emulated board answers every packet as this source does. Run it before any
   HE release; it proves the logic, not the MCU.
 
-## The instrument mode (branch work; BETA builds up to Icebreaker HE 1.0.10 / Cleaver HE 0.4.2.20, 2026-11-26; the owner played 1.0.6 and 1.0.7, and runs 1.0.10, on an Icebreaker HE; the Cleaver builds are unseen on a board)
+## The instrument mode (branch work; BETA builds up to Icebreaker HE 1.0.11 / Cleaver HE 0.4.2.21, 2026-11-27; the owner played 1.0.6 and 1.0.7, and runs 1.0.10, on an Icebreaker HE; the Cleaver builds are unseen on a board)
 
 - **On the owner's Icebreaker HE, 1.0.10, 2026-11-27** (from the configurator's DIAGNOSTICS line): the board
   enumerates as keyboard + raw HID + MIDI and the browser hears its notes (13 of 13); the moving stream runs at
@@ -188,6 +188,19 @@
   voice in hand and its sixteen steps. The get says bit 3 of d[19] (knows the layout), bit 4 (it is on) and
   d[21] (the step the light is on, from 1). The mode going off turns the layout off. Not known: how eleven
   hues look through the keycaps, and what a strip write a sixteenth note costs the scan rate.
+- **The drum layout comes from the configurator, and every key of it is lit** (BETA builds Icebreaker HE 1.0.11 /
+  Cleaver HE 0.4.2.21, built 2026-11-27: **flashing them over a build of 2026-11-26 erases the keymap and the
+  macros**; unseen on a board). The owner, of the first layout: "the drum pad layout is not obvious, it can't be
+  in clusters like that; if we're doing a cluster of instrument on Y and slot on X, the slot needs to be the top
+  or bottom row and the instrument needs to be some other row", and of the lights: "once you enter the drum
+  machine, it needs to light up all PLAYABLE KEYS, then active ones would just change color, that way the work
+  surface is clear". Id 27 set d[1] 6 gives the board the keys: d[2] 1 the sixteen steps or 2 the pads (twelve
+  at most, in the kit's order), d[3] the first one sent, d[4] how many, then (row, column) pairs; d[2] 0 puts
+  the first layout (the blocks) back. Bit 5 of the get's d[19] says the build takes a layout. The tables are
+  `drum_pad_s` and `drum_step_s`; `drum_pad_at` / `drum_step_at` look a sensor up. **A layout is data, not
+  firmware: change it in the configurator.** The lights: an empty step is dim white (28 of 255 of the lights'
+  brightness), the first of a beat a little brighter (60), a step with a hit is the voice's colour from 90 up
+  to full by its level, paler with a value of its own, and the step being played is full white.
 - Host tests: `run_synth` in `tests/host/run.py` (the piano by place whatever the keymap says, a strike, its
   velocity against its speed, pressure, the note's end, the octave keys, typing kept apart), `run_stream` (the
   moving stream: the first whole frame, the beat, a press as its own key, two keys in one report, the free

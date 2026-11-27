@@ -24,12 +24,13 @@
 //                  d[18] the note layout: 1 the piano by place (0, older builds: the tracker layout by keycode)
 //                  d[19] the lights: bit 0 this build has them, bit 1 they are wanted, bit 2 they are painted now,
 //                  d[20] how many keys are lit (0 while they are not painted);
-//                  d[19] also: bit 3 this build knows the drum layout, bit 4 that layout is on now; d[21] the drum step being played, from 1 (0 none)
+//                  d[19] also: bit 3 this build knows the drum layout, bit 4 that layout is on now; d[21] the drum step being played, from 1 (0 none); bit 5 of d[19]: the drum layout is taken from the configurator (set d[1] 6)
 //   set  d[1] 0, d[2] 1 or 0            the mode on or off
 //   set  d[1] 1, d[2] first depth, d[3] second depth, d[4] release depth, d[5] channel,
 //        d[6] octave shift + 2, d[7] pressure 1 or 0     (0xFF leaves a value; the depths are kept
 //        apart: first 5 to 50, second at least 10 past it and at most 90, release under the second)
 //   set  d[1] 3, d[2] 1 or 0, d[3] n, then n pairs (row, column), at most six     the drum layout on or off, and the keys beside the pads and steps that belong to it
+//   set  d[1] 6, d[2] 1 the steps or 2 the pads, d[3] the first one sent, d[4] how many (twelve at most), then (row, column) pairs     the layout, from the configurator; d[2] 0 puts the first layout back
 //   set  d[1] 4, d[2] hue, d[3] the pad in hand (0 to 10, 0xFF none), d[4..19] sixteen steps: level 0 to 100, with 0x80 if the step holds a value of its own
 //   set  d[1] 5, d[2] 0 stopped, 1 on the DAW's clock, 2 own; own: d[3..4] the board's clock (low 16 bits, high byte first) when step 0 was, d[5..6] ms a step lasts times 16
 //   set  d[1] 2, d[2] 1 or 0            the lights: only the instrument's keys while the mode is on (the default), or the lighting as it is

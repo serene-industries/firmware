@@ -72,22 +72,36 @@ enum { ROLE_NONE, ROLE_NOTE, ROLE_DOWN, ROLE_UP, ROLE_CONTROL, ROLE_DRUM };   //
 // is the colour of the voice in hand, as bright as its level, and paler if it holds a value of its own; the first
 // step of a beat is marked faintly; the step being played is full white, and the board moves that light itself,
 // on the DAW's clock or from the time and tempo the configurator gave it, so it is right when the browser is busy.
+// The layout itself comes from the configurator (set d[1] 6: which key is which pad, which is which step), so a
+// change of layout needs no new firmware. Until it is sent, the first layout stands (pads in a block at rows 3, 2,
+// 1, columns 1 to 4; steps in a block at rows 0 to 3, columns 7 to 10). The owner, 2026-11-27, of that first
+// layout: "it can't be in clusters like that ... the slot needs to be the top or bottom row and the instrument
+// needs to be some other row", and of the lights: "once you enter the drum machine, it needs to light up all
+// PLAYABLE KEYS, then active ones would just change color, that way the work surface is clear". So every key of
+// the layout is lit from the moment it is on: an empty step dim white, the first of a beat a little brighter.
 #define DRUM_FREE 11
-static bool     drums = false;
+#define DRUM_PADS 12
+static bool     drums = false, drum_laid = false;
+static uint8_t  drum_pad_s[DRUM_PADS], drum_step_s[16];                   // the sensor of each pad and each step; 0xFF none
 static uint8_t  drum_extra[6], drum_extras = 0;
 static uint8_t  dr_hue = 0, dr_hand = 0xFF, dr_steps[16], dr_mode = 0;   // a step: its level 0 to 100, with 0x80 if it holds a value of its own
 static uint32_t dr_t0 = 0;                                                // own clock: when step 0 was
 static uint16_t dr_step16 = 2000;                                         // own clock: milliseconds a step lasts, times 16
 static int8_t   dr_cur = -1;
 static const uint8_t DR_HUE[11] = {0, 23, 46, 70, 93, 116, 139, 162, 185, 209, 232};   // round the colour wheel, a voice a colour
-static int8_t drum_pad_of(uint8_t r, uint8_t c) {
-    if (c < 1 || c > 4) return -1;
-    if (r == 3) return c - 1;
-    if (r == 2) return c == 1 ? 4 : c == 2 ? DRUM_FREE : c + 2;
-    if (r == 1) return c + 6;
-    return -1;
+static void drum_first_layout(void) {
+    memset(drum_pad_s, 0xFF, sizeof(drum_pad_s)); memset(drum_step_s, 0xFF, sizeof(drum_step_s));
+    for (uint8_t s = 0; s < SENSOR_COUNT; s++) {
+        uint8_t r = sensor_to_matrix_map[s].row, c = sensor_to_matrix_map[s].col;
+        if (c >= 1 && c <= 4) {
+            int8_t pad = r == 3 ? c - 1 : r == 2 ? (c == 1 ? 4 : c == 2 ? DRUM_FREE : c + 2) : r == 1 ? c + 6 : -1;
+            if (pad >= 0) drum_pad_s[pad] = s;
+        }
+        if (r <= 3 && c >= 7 && c <= 10) drum_step_s[r * 4 + (c - 7)] = s;
+    }
 }
-static int8_t drum_step_of(uint8_t r, uint8_t c) { return (r <= 3 && c >= 7 && c <= 10) ? (int8_t)(r * 4 + (c - 7)) : -1; }
+static int8_t drum_pad_at(uint8_t s) { for (uint8_t i = 0; i < DRUM_PADS; i++) if (drum_pad_s[i] == s) return (int8_t)i; return -1; }
+static int8_t drum_step_at(uint8_t s) { for (uint8_t i = 0; i < 16; i++) if (drum_step_s[i] == s) return (int8_t)i; return -1; }
 static bool drum_is_extra(uint8_t s) { for (uint8_t i = 0; i < drum_extras; i++) if (drum_extra[i] == s) return true; return false; }
 static int8_t drum_now(void) {   // the step being played, or -1
     if (dr_mode == 1) return he_midi_running() ? (int8_t)((he_midi_tick() / 6) % 16) : -1;
@@ -103,7 +117,7 @@ static void map_notes(void) {
         uint8_t r = sensor_to_matrix_map[s].row, c = sensor_to_matrix_map[s].col, st = NN;
         if (drums) {
             note_of[s] = NO_NOTE;
-            role_of[s] = (drum_pad_of(r, c) >= 0 || drum_step_of(r, c) >= 0 || drum_is_extra(s)) ? ROLE_DRUM : ROLE_NONE;
+            role_of[s] = (drum_pad_at(s) >= 0 || drum_step_at(s) >= 0 || drum_is_extra(s)) ? ROLE_DRUM : ROLE_NONE;
             continue;
         }
         if (r == WHITE_ROW && c >= 1 && c <= (uint8_t)sizeof(SYN_WHITE)) st = SYN_WHITE[c - 1];
@@ -136,14 +150,14 @@ static void lights_paint_drums(void) {
     uint8_t hsv[SENSOR_COUNT * 3];
     int8_t  cur = drum_now();
     for (uint8_t s = 0; s < SENSOR_COUNT; s++) {
-        uint8_t r = sensor_to_matrix_map[s].row, c = sensor_to_matrix_map[s].col, h = 0, sa = 0, v = 0;
-        int8_t  pad = drum_pad_of(r, c), st = drum_step_of(r, c);
+        uint8_t h = 0, sa = 0, v = 0;
+        int8_t  pad = drum_pad_at(s), st = drum_step_at(s);
         if (pad >= 0 && pad != DRUM_FREE) { h = DR_HUE[pad]; sa = 255; v = light_down[s] ? 255 : (uint8_t)pad == dr_hand ? 150 : 70; }
         else if (st >= 0) {
             uint8_t level = dr_steps[st] & 0x7F;
             if (st == cur) { v = 255; }                                                             // the running light
-            else if (level) { h = dr_hue; sa = (dr_steps[st] & 0x80) ? 110 : 255; v = (uint8_t)(40 + ((uint16_t)(level > 100 ? 100 : level) * 215) / 100); }
-            else if ((st & 3) == 0) { v = 18; }                                                     // a beat starts here
+            else if (level) { h = dr_hue; sa = (dr_steps[st] & 0x80) ? 110 : 255; v = (uint8_t)(90 + ((uint16_t)(level > 100 ? 100 : level) * 165) / 100); }   // a hit: the voice's colour, brighter the louder
+            else { v = (st & 3) == 0 ? 60 : 28; }                                                   // an empty step is lit too: the work surface shows; a beat's first a little brighter
         } else if (drum_is_extra(s)) { v = light_down[s] ? 255 : 30; }
         hsv[s * 3] = h; hsv[s * 3 + 1] = sa; hsv[s * 3 + 2] = v;
     }
@@ -341,7 +355,7 @@ void he_synth_get(uint8_t *d) {
     d[16] = last_tenths & 0xFF;
     d[17] = HE_SYNTH_HAS_MIDI;
     d[18] = HE_SYNTH_LAYOUT_PIANO;
-    d[19] = 1 | (lights ? 2 : 0) | (lights_shown ? 4 : 0) | 8 | (drums ? 16 : 0);   // the lights: this build has them, they are wanted, they are painted now; it knows the drum layout; that layout is on
+    d[19] = 1 | (lights ? 2 : 0) | (lights_shown ? 4 : 0) | 8 | (drums ? 16 : 0) | 32;   // bit 5: it takes the drum layout from the configurator; the lights: this build has them, they are wanted, they are painted now; it knows the drum layout; that layout is on
     d[21] = drums ? (uint8_t)(drum_now() + 1) : 0;             // the drum step the running light is on, from 1; 0 none
     d[20] = lights_shown ? lights_count() : 0;                 // how many keys are lit
 }
@@ -368,6 +382,7 @@ void he_synth_set(uint8_t *d) {
         if (!on) return;
         for (uint8_t s = 0; s < SENSOR_COUNT; s++) end_note(&key[s], 64);
         drums       = d[2] != 0;
+        if (drums && !drum_laid) drum_first_layout();
         drum_extras = 0;
         for (uint8_t i = 0; drums && i < d[3] && i < 6; i++) {
             for (uint8_t s = 0; s < SENSOR_COUNT; s++) if (sensor_to_matrix_map[s].row == d[4 + i * 2] && sensor_to_matrix_map[s].col == d[5 + i * 2]) { drum_extra[drum_extras++] = s; break; }
@@ -377,6 +392,17 @@ void he_synth_set(uint8_t *d) {
         for (uint8_t s = 0; s < SENSOR_COUNT; s++) key[s].prev = 1000;   // a key held across the change does not strike
         map_notes();
         if (lights) lights_paint();
+    } else if (d[1] == 6) {                  // the layout: d[2] 1 the steps, 2 the pads; d[3] the first one sent, d[4] how many, then (row, column) pairs; d[2] 0 back to the first layout
+        if (d[2] == 0) { drum_laid = false; drum_first_layout(); }
+        else {
+            if (!drum_laid) { memset(drum_pad_s, 0xFF, sizeof(drum_pad_s)); memset(drum_step_s, 0xFF, sizeof(drum_step_s)); drum_laid = true; }
+            uint8_t *table = d[2] == 1 ? drum_step_s : drum_pad_s, size = d[2] == 1 ? 16 : DRUM_PADS;
+            for (uint8_t i = 0; i < d[4] && i < 12 && d[3] + i < size; i++) {
+                table[d[3] + i] = 0xFF;
+                for (uint8_t s = 0; s < SENSOR_COUNT; s++) if (sensor_to_matrix_map[s].row == d[5 + i * 2] && sensor_to_matrix_map[s].col == d[6 + i * 2]) { table[d[3] + i] = s; break; }
+            }
+        }
+        if (on && drums) { map_notes(); lights_dirty = true; }
     } else if (d[1] == 4) {                  // the drum lights: the colour of the voice in hand, which pad that is, and its sixteen steps
         dr_hue = d[2]; dr_hand = d[3];
         memcpy(dr_steps, &d[4], sizeof(dr_steps));
