@@ -28,6 +28,14 @@
   Suspect board files and the configurator before the core.
 - Test builds: publish with `prerelease: true`; the visualizer page offers
   prereleases, the main configurator does not.
+- **A flash through the site wipes everything the board stored, whatever the build date** (read from the files
+  2026-11-28, not watched on a board). QMK's layout for this chip (`STM32F411xE.ld`, `GENERIC_STM32_F411XE`) puts
+  the stored settings in flash sector 1 (0x08004000, 16 KB) with code before and after it; the released `.bin` is
+  one piece and carries 16384 zero bytes over that sector; the configurator's flasher (and dfu-util with a
+  `.bin`) erases every sector the image touches and writes all of it. So keymap, macros, lighting, Hall-effect
+  levels and calibration go on every flash; `he_perkey_carry_over()` and the "same-day builds keep them" note
+  below only hold for a flash that leaves sector 1 alone, which none so far does. Reading the sector before a
+  flash and writing it back with the image would keep it (the configurator's lab page does this for one board).
 - **Flashing wipes VIA state when the build date changes.** `via.c` derives
   its EEPROM magic from `QMK_BUILDDATE` (YY-MM-DD). A build from another
   day fails `via_eeprom_is_valid()`, so boot runs `dynamic_keymap_reset()`

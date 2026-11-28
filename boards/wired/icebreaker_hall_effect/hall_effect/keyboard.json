@@ -60,7 +60,7 @@
                 {"label": "=",     "matrix": [0, 12], "x": 12.0, "y": 0.0},
                 {"label": "pipe",  "matrix": [0, 13], "x": 13.0, "y": 0.0},
                 {"label": "del",   "matrix": [0, 14], "x": 14.0, "y": 0.0},
-                {"label": "tilda", "matrix": [0, 15], "x": 54.0, "y": 0.0},
+                {"label": "tilda", "matrix": [0, 15], "x": 15.0, "y": 0.0},
                 {"label": "tab", "matrix": [1, 0], "w": 1.5, "x": 0.0, "y": 1.0},
                 {"label": "q", "matrix": [1, 1], "x": 1.5, "y": 1.0},
                 {"label": "w", "matrix": [1, 2], "x": 2.5, "y": 1.0},
