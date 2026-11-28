@@ -10,6 +10,14 @@
 - Do not add `Claude-Session:` or `Co-Authored-By: Claude` trailers to
   commits (owner's instruction, 2026-11-08). Plain commit messages only.
 
+## Speed is a requirement (owner, 2026-11-28)
+
+"Try to always optimize performance so that there's no lag, there's no input lag ... our controls don't feel
+laggy or like you're in water or floaty. It needs to be sharp and crisp." The path from a sensor to the USB
+report is measured in every build (scans a second, the longest gap between scans) and shown with it; a change
+that makes it slower says so and why; no settle or debounce delay is added without a measurement that it is
+needed; nothing that blocks runs while keys are in use.
+
 ## Firmware rules (learned 2026-11-24)
 
 - **Confirm your code is compiled.** QMK only auto-adds `<folder>.c`
@@ -34,8 +42,10 @@
   one piece and carries 16384 zero bytes over that sector; the configurator's flasher (and dfu-util with a
   `.bin`) erases every sector the image touches and writes all of it. So keymap, macros, lighting, Hall-effect
   levels and calibration go on every flash; `he_perkey_carry_over()` and the "same-day builds keep them" note
-  below only hold for a flash that leaves sector 1 alone, which none so far does. Reading the sector before a
-  flash and writing it back with the image would keep it (the configurator's lab page does this for one board).
+  below only hold for a flash that leaves sector 1 alone, which none so far does. The configurator's flasher reads the
+  sector before a flash and writes it back inside the image since 2026-11-28 (seen on one Icebreaker HE: the
+  board came back exactly as it was), so an update from the site keeps levels, calibration and lighting; QMK
+  Toolbox and dfu-util with the `.bin` still write the zeros.
 - **Flashing wipes VIA state when the build date changes.** `via.c` derives
   its EEPROM magic from `QMK_BUILDDATE` (YY-MM-DD). A build from another
   day fails `via_eeprom_is_valid()`, so boot runs `dynamic_keymap_reset()`
